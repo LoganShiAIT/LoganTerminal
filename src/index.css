@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  --claude-orange: #d97757;
+  --claude-orange-soft: rgba(217, 119, 87, 0.08);
+  --claude-orange-line: rgba(217, 119, 87, 0.09);
+  --bg-base: #1a1512;
+  --bg-panel: #14100d;
+  --border-warm: rgba(217, 119, 87, 0.18);
+  --text-primary: #f5efe8;
+  --text-muted: #a89285;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text-primary);
+  background-color: var(--bg-base);
+}
+
+#root {
+  background-color: var(--bg-base);
+  background-image:
+    linear-gradient(
+      to right,
+      var(--claude-orange-line) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--claude-orange-line) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 0%,
+      rgba(217, 119, 87, 0.08) 0%,
+      transparent 60%
+    );
+  background-size: 28px 28px, 28px 28px, 100% 100%;
+  background-position: -1px -1px, -1px -1px, 0 0;
+}
