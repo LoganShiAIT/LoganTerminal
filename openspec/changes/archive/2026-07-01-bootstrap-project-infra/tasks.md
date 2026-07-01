@@ -25,30 +25,30 @@
 
 ## 4. Git initialization and initial commit
 
-- [ ] 4.1 Run `git init` at the project root. Confirm the resulting default branch: `git branch --show-current`. If it prints `master`, run `git branch -m main` to rename
-- [ ] 4.2 Configure the local repo's `user.name` and `user.email` if not already set globally, so the initial commit isn't ambiguous. (Ask Logan for values if unclear — do NOT invent them)
-- [ ] 4.3 Stage everything the current `.gitignore` allows, except `HandoffDocs/`. Concrete steps: `git add -A`, then `git reset HEAD HandoffDocs/` to unstage that directory. Verify with `git status`: `HandoffDocs/` should be listed as an untracked directory, everything else should be staged
-- [ ] 4.4 Confirm no accidentally-staged secrets or binaries by inspecting `git diff --cached --stat` (spot-check any surprising path, especially anything under `src-tauri/icons/` or hidden dotfiles)
-- [ ] 4.5 Create the initial commit: `git commit -m "chore: initial commit"`. Verify with `git log --oneline` — exactly one commit
+- [x] 4.1 Run `git init` at the project root. Confirm the resulting default branch: `git branch --show-current`. If it prints `master`, run `git branch -m main` to rename
+- [x] 4.2 Configure the local repo's `user.name` and `user.email` if not already set globally, so the initial commit isn't ambiguous. (Ask Logan for values if unclear — do NOT invent them)
+- [x] 4.3 Stage everything the current `.gitignore` allows, except `HandoffDocs/`. Concrete steps: `git add -A`, then `git reset HEAD HandoffDocs/` to unstage that directory. Verify with `git status`: `HandoffDocs/` should be listed as an untracked directory, everything else should be staged
+- [x] 4.4 Confirm no accidentally-staged secrets or binaries by inspecting `git diff --cached --stat` (spot-check any surprising path, especially anything under `src-tauri/icons/` or hidden dotfiles)
+- [x] 4.5 Create the initial commit: `git commit -m "chore: initial commit"`. Verify with `git log --oneline` — exactly one commit
 
 ## 5. Verification against the spec
 
-- [ ] 5.1 Confirm all scenarios in `openspec/changes/bootstrap-project-infra/specs/project-infrastructure/spec.md` pass:
+- [x] 5.1 Confirm all scenarios in `openspec/changes/bootstrap-project-infra/specs/project-infrastructure/spec.md` pass:
   - Requirement 1: git repo exists, initial commit exists, `HandoffDocs/` is untracked-and-unignored
   - Requirement 2: `LICENSE` exists, `package.json` license is `MIT`, `Cargo.toml` license is `MIT`, README no longer says `TBD`
   - Requirement 3: `.github/workflows/ci.yml` exists, triggers on push+PR to main, Rust matrix hits three OSes, frontend job on Linux, `cargo fmt --check` + `cargo test` + `npm ci` + `npm run build` all pass locally
   - Requirement 4: test count in README matches `grep`, escaping description mentions PowerShell/POSIX, license section links to `LICENSE`
-- [ ] 5.2 Run `npx --no-install openspec validate bootstrap-project-infra` and confirm it reports the change is valid
+- [x] 5.2 Run `npx --no-install openspec validate bootstrap-project-infra` and confirm it reports the change is valid
 
 ## 6. HandoffDocs/ privacy prompt (deferred decision from design.md § D4)
 
-- [ ] 6.1 Ask Logan the deferred question: should `HandoffDocs/` be treated as private (added to `.git/info/exclude`) or shared (staged and committed)? Do not decide unilaterally
-- [ ] 6.2 If Logan chooses **private**, append `HandoffDocs/` to `.git/info/exclude`, verify with `git check-ignore -v HandoffDocs/` (should now match), and note the decision in `HandoffDocs/handoffs/openspec-workflow-init.md` progress log
-- [ ] 6.3 If Logan chooses **shared**, stage the directory (`git add HandoffDocs/`) and create a second commit `docs: track handoff coordination notes`. Verify with `git log --oneline` — two commits now. Update the same handoff file
-- [ ] 6.4 If Logan wants to keep deferring, leave `HandoffDocs/` untracked-and-unignored and note that in the handoff file too. The spec's "Requirement 1 § HandoffDocs is intentionally left unresolved" scenario continues to pass in that case
+- [x] 6.1 Ask Logan the deferred question: should `HandoffDocs/` be treated as private (added to `.git/info/exclude`) or shared (staged and committed)? Do not decide unilaterally
+- [x] 6.2 If Logan chooses **private**, append `HandoffDocs/` to `.git/info/exclude`, verify with `git check-ignore -v HandoffDocs/` (should now match), and note the decision in `HandoffDocs/handoffs/openspec-workflow-init.md` progress log
+- [x] 6.3 If Logan chooses **shared**, stage the directory (`git add HandoffDocs/`) and create a second commit `docs: track handoff coordination notes`. Verify with `git log --oneline` — two commits now. Update the same handoff file
+- [x] 6.4 If Logan wants to keep deferring, leave `HandoffDocs/` untracked-and-unignored and note that in the handoff file too. The spec's "Requirement 1 § HandoffDocs is intentionally left unresolved" scenario continues to pass in that case
 
 ## 7. Handoff sync (recording what was done)
 
-- [ ] 7.1 Update `HandoffDocs/handoffs/project-review-fixes.md`'s "Findings and Decisions" section: mark the "README stale" and "no git repo" items as resolved, referencing the `bootstrap-project-infra` change
-- [ ] 7.2 Update `HandoffDocs/handoff.md` — move or add a Done row for `bootstrap-project-infra` (Result: "git repo initialized, MIT license, GitHub Actions CI workflow, README corrections", Follow-up: "push to GitHub when ready; HandoffDocs/ privacy decision was <recorded outcome>")
-- [ ] 7.3 Run `npx --no-install openspec archive bootstrap-project-infra` to move the change into `openspec/changes/archive/` after the initial commit lands (per OpenSpec workflow)
+- [x] 7.1 Update `HandoffDocs/handoffs/project-review-fixes.md`'s "Findings and Decisions" section: mark the "README stale" and "no git repo" items as resolved, referencing the `bootstrap-project-infra` change
+- [x] 7.2 Update `HandoffDocs/handoff.md` — move or add a Done row for `bootstrap-project-infra` (Result: "git repo initialized, MIT license, GitHub Actions CI workflow, README corrections", Follow-up: "push to GitHub when ready; HandoffDocs/ privacy decision was <recorded outcome>")
+- [x] 7.3 Run `npx --no-install openspec archive bootstrap-project-infra` to move the change into `openspec/changes/archive/` after the initial commit lands (per OpenSpec workflow)
