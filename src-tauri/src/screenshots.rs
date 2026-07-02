@@ -68,7 +68,7 @@ pub fn seed_recent(app: &AppHandle) {
         })
         .collect();
 
-    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.0));
     let items: Vec<ScreenshotItem> = candidates
         .into_iter()
         .filter_map(|(modified, path)| build_screenshot_item_with_time(&path, modified, false))

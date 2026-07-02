@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { usePtyStore } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -14,8 +16,22 @@ interface TerminalProps {
   initialCwd?: string | null;
 }
 
+function searchDecorations() {
+  const s = useSettingsStore.getState();
+  return buildSearchDecorations(s.themeId, s.accentOverride);
+}
+
 export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<XTerm | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [matchInfo, setMatchInfo] = useState<{
+    index: number;
+    count: number;
+  } | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
   const activeRef = useRef(active);
   useEffect(() => {
     activeRef.current = active;
@@ -25,41 +41,38 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
     if (!containerRef.current) return;
     const container = containerRef.current;
 
+    const settings = useSettingsStore.getState();
     const term = new XTerm({
+      // ui-monospace resolves to SF Mono on macOS / Cascadia Mono on Windows.
       fontFamily:
-        '"Menlo", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
-      fontSize: useSettingsStore.getState().fontSize,
+        'ui-monospace, "Menlo", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+      fontSize: settings.fontSize,
       lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: {
-        background: "#14100d",
-        foreground: "#f5efe8",
-        cursor: "#d97757",
-        cursorAccent: "#14100d",
-        selectionBackground: "rgba(217, 119, 87, 0.3)",
-        black: "#2a201b",
-        red: "#f87171",
-        green: "#86d68a",
-        yellow: "#e6b264",
-        blue: "#7aa5d9",
-        magenta: "#c084fc",
-        cyan: "#5eb3b3",
-        white: "#f5efe8",
-        brightBlack: "#5a4a42",
-        brightRed: "#fca5a5",
-        brightGreen: "#a5e6a8",
-        brightYellow: "#f5c785",
-        brightBlue: "#a3c1e0",
-        brightMagenta: "#d8b4fe",
-        brightCyan: "#8fcfcf",
-        brightWhite: "#faf6f1",
-      },
+      theme: buildXtermTheme(settings.themeId, settings.accentOverride),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
+    const search = new SearchAddon();
+    term.loadAddon(search);
     term.open(container);
+    termRef.current = term;
+    searchRef.current = search;
+
+    const searchResults = search.onDidChangeResults(
+      ({ resultIndex, resultCount }) => {
+        setMatchInfo({ index: resultIndex, count: resultCount });
+      },
+    );
+
+    const updateAtBottom = () => {
+      const buf = term.buffer.active;
+      setAtBottom(buf.viewportY >= buf.baseY);
+    };
+    const scrollDisposable = term.onScroll(updateAtBottom);
+    const writeDisposable = term.onWriteParsed(updateAtBottom);
 
     let unlistenData: UnlistenFn | null = null;
     let unlistenExit: UnlistenFn | null = null;
@@ -86,10 +99,15 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
           sessionId = id;
           unlistenData = await listen<string>(`pty://data/${id}`, (e) => {
             term.write(e.payload);
+            // Store no-ops when this is already the active tab.
+            usePtyStore.getState().markUnread(tabId);
           });
           unlistenExit = await listen(`pty://exit/${id}`, () => {
             term.writeln("\r\n\x1b[31m[process exited]\x1b[0m");
             exited = true;
+            const store = usePtyStore.getState();
+            store.markExited(tabId);
+            store.markUnread(tabId);
           });
           unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
             usePtyStore.getState().setCwd(tabId, e.payload);
@@ -138,10 +156,16 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
     const ro = new ResizeObserver(onSize);
     ro.observe(container);
 
-    const unsubFont = useSettingsStore.subscribe((s) => {
+    const unsubSettings = useSettingsStore.subscribe((s, prev) => {
       if (term.options.fontSize !== s.fontSize) {
         term.options.fontSize = s.fontSize;
         onSize();
+      }
+      if (
+        s.themeId !== prev.themeId ||
+        s.accentOverride !== prev.accentOverride
+      ) {
+        term.options.theme = buildXtermTheme(s.themeId, s.accentOverride);
       }
     });
 
@@ -161,6 +185,9 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
       } else if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         term.clear();
+      } else if ((e.key === "f" || e.key === "F") && !e.shiftKey) {
+        e.preventDefault();
+        setSearchOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -171,7 +198,7 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
     return () => {
       disposed = true;
       ro.disconnect();
-      unsubFont();
+      unsubSettings();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
       unlistenData?.();
@@ -181,9 +208,151 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
       if (sessionId && !exited) {
         invoke("pty_kill", { sessionId });
       }
+      searchResults.dispose();
+      scrollDisposable.dispose();
+      writeDisposable.dispose();
+      termRef.current = null;
+      searchRef.current = null;
       term.dispose();
     };
   }, [tabId, initialCwd]);
 
-  return <div ref={containerRef} className="w-full h-full p-2" />;
+  // Focus the search box on open, prefilled from the terminal selection.
+  useEffect(() => {
+    if (!searchOpen) return;
+    const input = searchInputRef.current;
+    if (!input) return;
+    const selection = termRef.current?.getSelection().trim() ?? "";
+    if (selection && !selection.includes("\n")) {
+      input.value = selection;
+      searchRef.current?.findNext(selection, {
+        incremental: true,
+        decorations: searchDecorations(),
+      });
+    }
+    input.focus();
+    input.select();
+  }, [searchOpen]);
+
+  const findNext = () => {
+    const q = searchInputRef.current?.value ?? "";
+    if (q)
+      searchRef.current?.findNext(q, { decorations: searchDecorations() });
+  };
+
+  const findPrev = () => {
+    const q = searchInputRef.current?.value ?? "";
+    if (q)
+      searchRef.current?.findPrevious(q, { decorations: searchDecorations() });
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setMatchInfo(null);
+    searchRef.current?.clearDecorations();
+    termRef.current?.clearSelection();
+    termRef.current?.focus();
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      {/* pl-3 gives the text a gutter; pr-1 keeps the xterm scrollbar near the edge. */}
+      <div ref={containerRef} className="w-full h-full pl-3 pr-1 py-2" />
+
+      {searchOpen && (
+        <div className="absolute top-1.5 right-3 z-10 flex items-center gap-0.5 h-8 pl-2.5 pr-1 rounded-lg border border-edge bg-raise/95 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.45)] animate-[pop-in_0.12s_ease-out]">
+          <input
+            ref={searchInputRef}
+            type="text"
+            spellCheck={false}
+            placeholder="find"
+            className="w-40 bg-transparent font-mono text-xs text-ink placeholder:text-faint focus:outline-none"
+            onChange={(e) => {
+              const q = e.target.value;
+              if (q) {
+                searchRef.current?.findNext(q, {
+                  incremental: true,
+                  decorations: searchDecorations(),
+                });
+              } else {
+                searchRef.current?.clearDecorations();
+                termRef.current?.clearSelection();
+                setMatchInfo(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) findPrev();
+                else findNext();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                closeSearch();
+              }
+            }}
+          />
+          <span className="font-mono text-[10px] text-faint min-w-[3.2em] text-center shrink-0">
+            {matchInfo
+              ? matchInfo.count > 0
+                ? `${matchInfo.index + 1}/${matchInfo.count}`
+                : "0/0"
+              : ""}
+          </span>
+          <button
+            className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
+            onClick={findPrev}
+            title="Previous match (⇧↩)"
+          >
+            <ChevronIcon dir="up" />
+          </button>
+          <button
+            className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
+            onClick={findNext}
+            title="Next match (↩)"
+          >
+            <ChevronIcon dir="down" />
+          </button>
+          <button
+            className="w-6 h-6 grid place-items-center rounded-md text-[13px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
+            onClick={closeSearch}
+            title="Close (esc)"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {!atBottom && (
+        <button
+          className="absolute bottom-3 right-4 z-10 w-8 h-8 grid place-items-center rounded-full border border-edge bg-raise/90 backdrop-blur-md text-accent shadow-[0_2px_12px_rgba(0,0,0,0.4)] hover:bg-accent hover:text-white transition-colors animate-[pop-in_0.12s_ease-out]"
+          onClick={() => {
+            termRef.current?.scrollToBottom();
+            termRef.current?.focus();
+          }}
+          title="Scroll to bottom"
+        >
+          <ChevronIcon dir="down" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ChevronIcon({ dir }: { dir: "up" | "down" }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={dir === "up" ? "rotate-180" : ""}
+    >
+      <path d="M3.5 6l4.5 4.5L12.5 6" />
+    </svg>
+  );
 }

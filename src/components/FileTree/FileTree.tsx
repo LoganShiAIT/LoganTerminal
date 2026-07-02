@@ -1,29 +1,95 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useActiveTab } from "../../stores/ptyStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { shellEscapePath } from "../../lib/shellEscape";
+import { homeDir, tildify, joinPath, parentOf } from "../../lib/paths";
 
 interface FsEntry {
   name: string;
   is_dir: boolean;
 }
 
-function joinPath(base: string, name: string): string {
-  if (base.endsWith("/")) return base + name;
-  return base + "/" + name;
+function FolderIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+      className="shrink-0 text-accent/80"
+    >
+      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.9l1.4 1.7h4.7A1.5 1.5 0 0 1 14 6.2v5.3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7Z" />
+    </svg>
+  );
 }
 
-function parentOf(p: string): string {
-  const trimmed = p.replace(/\/+$/, "");
-  const idx = trimmed.lastIndexOf("/");
-  if (idx <= 0) return "/";
-  return trimmed.slice(0, idx);
+function FileIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+      className="shrink-0 text-faint"
+    >
+      <path d="M4 2.5h5L12.5 6v7a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 .5-1Z" />
+      <path d="M9 2.5V6h3.5" />
+    </svg>
+  );
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M1.8 8s2.2-4 6.2-4 6.2 4 6.2 4-2.2 4-6.2 4S1.8 8 1.8 8Z" />
+      <circle cx="8" cy="8" r="1.7" />
+      {off && <path d="M2.5 13.5 13.5 2.5" />}
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
+      <path d="M13.5 1.8v2.7h-2.7" />
+    </svg>
+  );
 }
 
 export default function FileTree() {
   const [cwd, setCwd] = useState<string>("");
+  const [home, setHome] = useState<string | null>(null);
   const [entries, setEntries] = useState<FsEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const showHidden = useSettingsStore((s) => s.showHiddenFiles);
+  const toggleHidden = useSettingsStore((s) => s.toggleHiddenFiles);
   const activeTab = useActiveTab();
   const activeTabId = activeTab?.id ?? null;
   const activeSessionId = activeTab?.sessionId ?? null;
@@ -31,8 +97,9 @@ export default function FileTree() {
 
   useEffect(() => {
     (async () => {
-      const home = await invoke<string>("fs_home_dir");
-      setCwd((prev) => prev || home);
+      const h = await homeDir();
+      setHome(h);
+      setCwd((prev) => prev || h);
     })();
   }, []);
 
@@ -46,13 +113,13 @@ export default function FileTree() {
   useEffect(() => {
     if (!cwd) return;
     setError(null);
-    invoke<FsEntry[]>("fs_list_dir", { path: cwd })
+    invoke<FsEntry[]>("fs_list_dir", { path: cwd, showHidden })
       .then(setEntries)
       .catch((err) => {
         setError(String(err));
         setEntries([]);
       });
-  }, [cwd]);
+  }, [cwd, showHidden, refreshTick]);
 
   const insertPath = useCallback(
     async (path: string) => {
@@ -66,53 +133,84 @@ export default function FileTree() {
     [activeSessionId],
   );
 
+  const atRoot = !cwd || parentOf(cwd) === cwd;
+
   return (
     <div className="text-sm flex flex-col h-full">
-      <div className="p-3 pb-2 border-b border-[color:var(--border-warm)] shrink-0">
-        <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--claude-orange)] font-semibold">
-          Files
+      <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
+            Files
+          </div>
+          <div className="flex items-center gap-0.5 -mr-1">
+            <button
+              className={`w-6 h-6 grid place-items-center rounded-md transition-colors ${
+                showHidden
+                  ? "text-accent hover:bg-accent/10"
+                  : "text-faint hover:text-muted hover:bg-ink/5"
+              }`}
+              onClick={toggleHidden}
+              title={showHidden ? "Hide dotfiles" : "Show dotfiles"}
+            >
+              <EyeIcon off={!showHidden} />
+            </button>
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-faint hover:text-muted hover:bg-ink/5 transition-colors"
+              onClick={() => setRefreshTick((n) => n + 1)}
+              title="Refresh"
+            >
+              <RefreshIcon />
+            </button>
+          </div>
         </div>
         <div
-          className="text-[color:var(--text-muted)] text-xs mt-1 truncate cursor-pointer hover:text-[color:var(--claude-orange)] transition-colors"
-          title={cwd}
+          className="font-mono text-[11px] text-muted mt-1 truncate cursor-pointer hover:text-accent transition-colors"
+          title={cwd ? `${cwd} — click to insert` : undefined}
           onClick={() => insertPath(cwd)}
         >
-          {cwd || "…"}
+          {cwd ? tildify(cwd, home) : "…"}
         </div>
       </div>
-      <ul className="flex-1 overflow-y-auto py-1">
-        {cwd && cwd !== "/" && (
+      <ul className="flex-1 overflow-y-auto py-1.5">
+        {!atRoot && (
           <li
-            className="px-3 py-0.5 hover:bg-[color:var(--claude-orange-soft)] cursor-pointer text-[color:var(--text-muted)]"
+            className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer font-mono text-xs text-faint hover:bg-accent/[0.07] hover:text-muted transition-colors duration-100"
             onClick={() => setCwd(parentOf(cwd))}
           >
             ../
           </li>
         )}
         {error && (
-          <li className="px-3 py-2 text-red-400 text-xs">{error}</li>
+          <li className="mx-1.5 px-2 py-2 text-red-400/90 text-xs break-all">
+            {error}
+          </li>
         )}
         {entries.map((e) => {
           const full = joinPath(cwd, e.name);
+          const hidden = e.name.startsWith(".");
           return (
             <li
               key={e.name}
-              className="px-3 py-0.5 hover:bg-[color:var(--claude-orange-soft)] cursor-pointer flex items-center gap-2 transition-colors"
+              className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100"
               onClick={() => {
                 if (e.is_dir) setCwd(full);
                 else insertPath(full);
               }}
-              title={e.name}
+              title={e.is_dir ? `${e.name} — open` : `${e.name} — insert path`}
             >
+              {e.is_dir ? <FolderIcon /> : <FileIcon />}
               <span
-                className={
+                className={`truncate ${
                   e.is_dir
-                    ? "text-[color:var(--claude-orange)] truncate"
-                    : "text-[color:var(--text-primary)] truncate"
-                }
+                    ? hidden
+                      ? "text-ink/60"
+                      : "text-ink"
+                    : hidden
+                      ? "text-ink/45"
+                      : "text-ink/75"
+                }`}
               >
                 {e.name}
-                {e.is_dir && "/"}
               </span>
             </li>
           );

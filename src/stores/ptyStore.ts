@@ -6,6 +6,10 @@ export interface PtyTab {
   cwd: string | null;
   agentName: string | null;
   initialCwd: string | null;
+  /** Output arrived while the tab was in the background; cleared on activation. */
+  unread: boolean;
+  /** The shell process ended; the tab stays open but accepts no input. */
+  exited: boolean;
 }
 
 interface PtyStore {
@@ -20,6 +24,8 @@ interface PtyStore {
   setSessionId: (tabId: string, sessionId: string | null) => void;
   setCwd: (tabId: string, cwd: string | null) => void;
   setAgentName: (tabId: string, name: string | null) => void;
+  markUnread: (tabId: string) => void;
+  markExited: (tabId: string) => void;
   setDropPaths: (paths: string[] | null) => void;
 }
 
@@ -30,7 +36,15 @@ function makeTab(initialCwd: string | null = null): PtyTab {
     cwd: null,
     agentName: null,
     initialCwd,
+    unread: false,
+    exited: false,
   };
+}
+
+function withUnreadCleared(tabs: PtyTab[], activeId: string | null): PtyTab[] {
+  return tabs.map((t) =>
+    t.id === activeId && t.unread ? { ...t, unread: false } : t,
+  );
 }
 
 const SNAPSHOT_KEY = "logan.tabSnapshot";
@@ -90,20 +104,21 @@ export const usePtyStore = create<PtyStore>((set, get) => ({
     });
   },
 
-  setActiveTab: (id) => set({ activeTabId: id }),
+  setActiveTab: (id) =>
+    set((s) => ({ activeTabId: id, tabs: withUnreadCleared(s.tabs, id) })),
 
   cycleTab: (dir) => {
     const { tabs, activeTabId } = get();
     if (tabs.length === 0) return;
     const idx = tabs.findIndex((t) => t.id === activeTabId);
     const next = (idx + dir + tabs.length) % tabs.length;
-    set({ activeTabId: tabs[next].id });
+    get().setActiveTab(tabs[next].id);
   },
 
   jumpToTab: (index) => {
     const { tabs } = get();
     if (index < 0 || index >= tabs.length) return;
-    set({ activeTabId: tabs[index].id });
+    get().setActiveTab(tabs[index].id);
   },
 
   setSessionId: (tabId, sessionId) =>
@@ -119,6 +134,21 @@ export const usePtyStore = create<PtyStore>((set, get) => ({
   setAgentName: (tabId, agentName) =>
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, agentName } : t)),
+    })),
+
+  markUnread: (tabId) =>
+    set((s) => {
+      // The active tab is being watched — only background output counts.
+      const tab = s.tabs.find((t) => t.id === tabId);
+      if (!tab || tab.unread || tabId === s.activeTabId) return s;
+      return {
+        tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, unread: true } : t)),
+      };
+    }),
+
+  markExited: (tabId) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, exited: true } : t)),
     })),
 
   setDropPaths: (paths) => set({ dropPaths: paths }),
