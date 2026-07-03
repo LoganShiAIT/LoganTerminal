@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { usePtyStore } from "../../stores/ptyStore";
+import { usePtyStore, collectLeaves, activeLeafOf } from "../../stores/ptyStore";
 import { basename } from "../../lib/paths";
 
 function tabLabel(cwd: string | null): string {
@@ -163,7 +163,8 @@ export default function TabBar() {
 
   const handleNewTab = () => {
     const active = tabs.find((t) => t.id === activeTabId);
-    addTab(active?.cwd ?? null);
+    const leaf = active ? activeLeafOf(active) : null;
+    addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
   };
 
   return (
@@ -175,6 +176,11 @@ export default function TabBar() {
       {tabs.map((tab, i) => {
         const isActive = tab.id === activeTabId;
         const isDragging = drag?.id === tab.id;
+        const leaves = collectLeaves(tab.root);
+        const activeLeaf = activeLeafOf(tab);
+        const labelCwd = activeLeaf.cwd ?? activeLeaf.initialCwd;
+        const hasAgent = leaves.some((l) => l.agentName && !l.exited);
+        const allExited = leaves.every((l) => l.exited);
         return (
           <div
             key={tab.id}
@@ -194,7 +200,9 @@ export default function TabBar() {
               setActiveTab(tab.id);
             }}
             title={
-              tab.exited ? `${tab.cwd ?? "shell"} — exited` : (tab.cwd ?? undefined)
+              allExited
+                ? `${labelCwd ?? "shell"} — exited`
+                : (labelCwd ?? undefined)
             }
             style={
               isDragging
@@ -216,10 +224,10 @@ export default function TabBar() {
                   : ""
             }`}
           >
-            {tab.agentName && !tab.exited && (
+            {hasAgent && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-accent shrink-0 animate-[dot-glow_1.8s_ease-in-out_infinite]"
-                title={`agent: ${tab.agentName}`}
+                title={`agent: ${leaves.find((l) => l.agentName)?.agentName}`}
               />
             )}
             {tab.unread && !isActive && (
@@ -229,23 +237,31 @@ export default function TabBar() {
               />
             )}
             <span
-              className={`truncate ${tab.exited ? "line-through opacity-50" : ""}`}
+              className={`truncate ${allExited ? "line-through opacity-50" : ""}`}
             >
-              {tabLabel(tab.cwd)}
+              {tabLabel(labelCwd)}
             </span>
+            {leaves.length > 1 && (
+              <span
+                className="text-[9px] font-mono text-faint shrink-0"
+                title={`${leaves.length} panes`}
+              >
+                ◫{leaves.length}
+              </span>
+            )}
             {i < 9 && (
               <span className="text-[9px] font-mono text-faint shrink-0">
                 {i + 1}
               </span>
             )}
-            {(tabs.length > 1 || tab.exited) && (
+            {(tabs.length > 1 || allExited) && (
               <button
                 className="w-4 h-4 -mr-1 grid place-items-center rounded text-[11px] leading-none opacity-0 group-hover:opacity-100 text-muted hover:text-ink hover:bg-ink/10 transition-opacity shrink-0"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
                 }}
-                title="Close tab (⌘⇧W)"
+                title="Close tab (all panes)"
               >
                 ×
               </button>

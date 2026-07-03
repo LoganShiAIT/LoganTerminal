@@ -6,7 +6,7 @@ import {
   type ReviewAttachment,
   type ReviewKind,
 } from "../../stores/reviewStore";
-import { useActiveTab } from "../../stores/ptyStore";
+import { useActivePane } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { basename, joinPath } from "../../lib/paths";
 import { shellEscapePath } from "../../lib/shellEscape";
@@ -31,7 +31,7 @@ export default function ReviewPanel() {
   const attachments = useReviewStore((s) => s.attachments);
   const selectedPath = useReviewStore((s) => s.selectedPath);
   const selectPath = useReviewStore((s) => s.selectPath);
-  const activeSessionId = useActiveTab()?.sessionId ?? null;
+  const activeSessionId = useActivePane()?.sessionId ?? null;
 
   const [info, setInfo] = useState<FsPathInfo | null>(null);
   const [content, setContent] = useState("");

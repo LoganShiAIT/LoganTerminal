@@ -11,7 +11,7 @@ import {
   useScreenshotStore,
   type ScreenshotItem,
 } from "../../stores/screenshotStore";
-import { useActiveTab } from "../../stores/ptyStore";
+import { useActivePane } from "../../stores/ptyStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { basename } from "../../lib/paths";
 
@@ -44,7 +44,7 @@ export default function AssetPanel() {
   const prependShot = useScreenshotStore((s) => s.prepend);
   const removeShot = useScreenshotStore((s) => s.remove);
 
-  const activeSessionId = useActiveTab()?.sessionId ?? null;
+  const activeSessionId = useActivePane()?.sessionId ?? null;
   const [lightbox, setLightbox] = useState<LightboxData | null>(null);
 
   useEffect(() => {

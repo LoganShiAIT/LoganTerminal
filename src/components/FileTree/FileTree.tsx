@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useActiveTab } from "../../stores/ptyStore";
+import { useActivePane } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { homeDir, tildify, joinPath, parentOf } from "../../lib/paths";
@@ -91,10 +91,10 @@ export default function FileTree() {
   const [refreshTick, setRefreshTick] = useState(0);
   const showHidden = useSettingsStore((s) => s.showHiddenFiles);
   const toggleHidden = useSettingsStore((s) => s.toggleHiddenFiles);
-  const activeTab = useActiveTab();
-  const activeTabId = activeTab?.id ?? null;
-  const activeSessionId = activeTab?.sessionId ?? null;
-  const ptyCwd = activeTab?.cwd ?? null;
+  const activePane = useActivePane();
+  const activePaneId = activePane?.id ?? null;
+  const activeSessionId = activePane?.sessionId ?? null;
+  const ptyCwd = activePane?.cwd ?? null;
 
   useEffect(() => {
     (async () => {
@@ -106,10 +106,10 @@ export default function FileTree() {
 
   useEffect(() => {
     if (ptyCwd) setCwd(ptyCwd);
-    // activeTabId is a deliberate dependency: re-sync to the newly active
-    // tab's cwd even when it happens to equal the previous tab's cwd value,
-    // so manual FileTree browsing in one tab doesn't leak into another.
-  }, [ptyCwd, activeTabId]);
+    // activePaneId is a deliberate dependency: re-sync to the newly focused
+    // pane's cwd even when it happens to equal the previous pane's cwd value,
+    // so manual FileTree browsing in one pane doesn't leak into another.
+  }, [ptyCwd, activePaneId]);
 
   useEffect(() => {
     if (!cwd) return;

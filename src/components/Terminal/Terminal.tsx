@@ -15,6 +15,7 @@ import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
   tabId: string;
+  paneId: string;
   active: boolean;
   initialCwd?: string | null;
 }
@@ -24,7 +25,14 @@ function searchDecorations() {
   return buildSearchDecorations(s.themeId, s.accentOverride);
 }
 
-export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
+const isMac = navigator.userAgent.includes("Mac");
+
+export default function Terminal({
+  tabId,
+  paneId,
+  active,
+  initialCwd,
+}: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -123,16 +131,16 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
             term.writeln("\r\n\x1b[31m[process exited]\x1b[0m");
             exited = true;
             const store = usePtyStore.getState();
-            store.markExited(tabId);
+            store.markPaneExited(paneId);
             store.markUnread(tabId);
           });
           unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
-            usePtyStore.getState().setCwd(tabId, e.payload);
+            usePtyStore.getState().setCwd(paneId, e.payload);
           });
           unlistenAgent = await listen<string | null>(
             `pty://agent/${id}`,
             (e) => {
-              usePtyStore.getState().setAgentName(tabId, e.payload ?? null);
+              usePtyStore.getState().setAgentName(paneId, e.payload ?? null);
             },
           );
 
@@ -146,7 +154,7 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
             invoke("pty_kill", { sessionId: id });
             return;
           }
-          usePtyStore.getState().setSessionId(tabId, id);
+          usePtyStore.getState().setSessionId(paneId, id);
           term.onData((data) => {
             if (sessionId && !exited) invoke("pty_write", { sessionId, data });
           });
@@ -156,7 +164,7 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
           unlistenCwd?.();
           unlistenAgent?.();
           sessionId = null;
-          usePtyStore.getState().setSessionId(tabId, null);
+          usePtyStore.getState().setSessionId(paneId, null);
           term.writeln(`\r\n\x1b[31mpty_spawn failed: ${err}\x1b[0m`);
         } finally {
           spawning = false;
@@ -214,7 +222,8 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
 
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return;
-      const mod = e.metaKey || e.ctrlKey;
+      // Mac: ⌘ only, so Ctrl+K (kill-line) etc. still reach the shell.
+      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
       if (!mod) return;
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
@@ -259,7 +268,7 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
       searchRef.current = null;
       term.dispose();
     };
-  }, [tabId, initialCwd]);
+  }, [tabId, paneId, initialCwd]);
 
   // Focus the search box on open, prefilled from the terminal selection.
   useEffect(() => {

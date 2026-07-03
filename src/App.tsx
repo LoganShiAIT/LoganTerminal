@@ -1,21 +1,64 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
-import Terminal from "./components/Terminal/Terminal";
 import FileTree from "./components/FileTree/FileTree";
 import RightPanel from "./components/RightPanel/RightPanel";
 import DropOverlay from "./components/DropOverlay/DropOverlay";
 import TabBar from "./components/TabBar/TabBar";
+import PaneTree from "./components/PaneTree/PaneTree";
 import SettingsPanel from "./components/Settings/SettingsPanel";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
-import { usePtyStore, useActiveTab } from "./stores/ptyStore";
+import {
+  usePtyStore,
+  useActiveTab,
+  useActivePane,
+  getActiveLeaf,
+  collectLeaves,
+} from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
 import { shellEscapePaths } from "./lib/shellEscape";
 import { homeDir, tildify } from "./lib/paths";
 import { attachReviewPaths } from "./lib/reviewAttachments";
+import { sendTermCmd } from "./lib/termBus";
 
 const isMac = navigator.userAgent.includes("Mac");
+
+/**
+ * Move pane focus geometrically (⌘⌥arrows). Panes are located via their
+ * data-pane-id DOM rects; hidden tabs' panes have zero size and are skipped.
+ */
+function focusDirectionalPane(dir: "left" | "right" | "up" | "down") {
+  const s = usePtyStore.getState();
+  const tab = s.tabs.find((t) => t.id === s.activeTabId);
+  if (!tab || tab.root.type === "leaf") return;
+  const els = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-pane-id]"),
+  ).filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0);
+  const current = els.find((el) => el.dataset.paneId === tab.activePaneId);
+  if (!current) return;
+  const c = current.getBoundingClientRect();
+  const cx = c.left + c.width / 2;
+  const cy = c.top + c.height / 2;
+  let best: { id: string; score: number } | null = null;
+  for (const el of els) {
+    if (el === current) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx;
+    const dy = r.top + r.height / 2 - cy;
+    const inDir =
+      dir === "right" ? dx > 1 : dir === "left" ? dx < -1 : dir === "down" ? dy > 1 : dy < -1;
+    if (!inDir) continue;
+    const primary = dir === "left" || dir === "right" ? Math.abs(dx) : Math.abs(dy);
+    const cross = dir === "left" || dir === "right" ? Math.abs(dy) : Math.abs(dx);
+    const score = primary + cross * 2;
+    if (!best || score < best.score) best = { id: el.dataset.paneId!, score };
+  }
+  if (best) {
+    s.setActivePane(tab.id, best.id);
+    requestAnimationFrame(() => sendTermCmd("focus"));
+  }
+}
 
 export default function App() {
   const tabs = usePtyStore((s) => s.tabs);
@@ -47,8 +90,8 @@ export default function App() {
     let unlisten: (() => void) | null = null;
     (async () => {
       unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
-        const { setDropPaths, tabs, activeTabId } = usePtyStore.getState();
-        const sid = tabs.find((t) => t.id === activeTabId)?.sessionId;
+        const { setDropPaths } = usePtyStore.getState();
+        const sid = getActiveLeaf()?.sessionId;
         const p = event.payload;
         if (p.type === "enter" || p.type === "over") {
           if ("paths" in p && p.paths && p.paths.length > 0) {
@@ -79,18 +122,39 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
+      // Mac: ⌘ only — plain Ctrl must reach the shell untouched (Ctrl+D EOF,
+      // Ctrl+K kill-line, Ctrl+T transpose). Elsewhere Ctrl is the app mod.
+      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
       if (!mod) return;
       const store = usePtyStore.getState();
       if (e.key === "t" && !e.shiftKey) {
         e.preventDefault();
-        const active = store.tabs.find((t) => t.id === store.activeTabId);
-        store.addTab(active?.cwd ?? null);
+        const leaf = getActiveLeaf();
+        store.addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
       } else if ((e.key === "w" || e.key === "W") && e.shiftKey) {
         // Shift avoids plain Cmd+W, which macOS's default window menu
         // intercepts before it reaches the webview and closes the whole app.
+        // Closes the focused pane; the last pane of a tab closes the tab.
         e.preventDefault();
-        if (store.activeTabId) store.closeTab(store.activeTabId);
+        store.closeActivePane();
+        requestAnimationFrame(() => sendTermCmd("focus"));
+      } else if ((e.key === "d" || e.key === "D") && (isMac || e.shiftKey)) {
+        // Windows keeps plain Ctrl+D for the shell; Ctrl+Shift+D splits
+        // (down), and split-right stays reachable via the palette.
+        e.preventDefault();
+        store.splitPane(e.shiftKey ? "col" : "row");
+        requestAnimationFrame(() => sendTermCmd("focus"));
+      } else if (e.altKey && e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        focusDirectionalPane(
+          e.key === "ArrowLeft"
+            ? "left"
+            : e.key === "ArrowRight"
+              ? "right"
+              : e.key === "ArrowUp"
+                ? "up"
+                : "down",
+        );
       } else if (e.shiftKey && e.key === "]") {
         e.preventDefault();
         store.cycleTab(1);
@@ -196,11 +260,7 @@ export default function App() {
                   tab.id === activeTabId ? "absolute inset-0" : "hidden"
                 }
               >
-                <Terminal
-                  tabId={tab.id}
-                  active={tab.id === activeTabId}
-                  initialCwd={tab.initialCwd}
-                />
+                <PaneTree tab={tab} tabActive={tab.id === activeTabId} />
               </div>
             ))
           )}
@@ -260,7 +320,9 @@ function CrtOverlay() {
 /** Hairline under the header; sweeps with light while an agent is running. */
 function AgentHairline() {
   const activeTab = useActiveTab();
-  const agentLive = Boolean(activeTab?.agentName) && !activeTab?.exited;
+  const agentLive = activeTab
+    ? collectLeaves(activeTab.root).some((l) => l.agentName && !l.exited)
+    : false;
   return (
     <span
       aria-hidden
@@ -351,32 +413,33 @@ function GearIcon() {
 
 function StatusCluster() {
   const activeTab = useActiveTab();
+  const pane = useActivePane();
   const [home, setHome] = useState<string | null>(null);
 
   useEffect(() => {
     homeDir().then(setHome).catch(() => {});
   }, []);
 
-  const exited = Boolean(activeTab?.exited);
-  const live = Boolean(activeTab?.sessionId) && !exited;
-  const cwd = activeTab?.cwd ?? null;
+  const exited = Boolean(pane?.exited);
+  const live = Boolean(pane?.sessionId) && !exited;
+  const cwd = pane?.cwd ?? null;
 
   return (
     <div className="ml-auto flex items-center gap-2.5 shrink-0">
-      {activeTab?.agentName && !exited && (
+      {pane?.agentName && !exited && (
         <span
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
-          title={`Detected agent: ${activeTab.agentName}`}
+          title={`Detected agent: ${pane.agentName}`}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-          {activeTab.agentName}
+          {pane.agentName}
         </span>
       )}
       <span
         className="flex items-center gap-1.5 font-mono text-[11px] text-muted"
         title={
-          activeTab?.sessionId
-            ? `session ${activeTab.sessionId.slice(0, 8)}${cwd ? ` · ${cwd}` : ""}`
+          pane?.sessionId
+            ? `session ${pane.sessionId.slice(0, 8)}${cwd ? ` · ${cwd}` : ""}`
             : undefined
         }
       >
@@ -434,6 +497,9 @@ function WelcomeScreen() {
         </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘T</span> new tab
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="kbd">⌘D</span> split
         </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘F</span> find

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePtyStore } from "../../stores/ptyStore";
+import { usePtyStore, activeLeafOf, getActiveLeaf } from "../../stores/ptyStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSettingsStore, type CursorStyle } from "../../stores/settingsStore";
 import { THEMES } from "../../themes";
@@ -50,10 +50,12 @@ function useActions(): PaletteAction[] {
     const actions: PaletteAction[] = [];
 
     tabs.forEach((tab, i) => {
+      const leaf = activeLeafOf(tab);
+      const cwd = leaf.cwd ?? leaf.initialCwd;
       actions.push({
         id: `tab-${tab.id}`,
         group: "Tabs",
-        label: `Go to tab ${i + 1} — ${tab.cwd ? basename(tab.cwd) || "/" : "shell"}`,
+        label: `Go to tab ${i + 1} — ${cwd ? basename(cwd) || "/" : "shell"}`,
         hint: i < 9 ? `⌘${i + 1}` : undefined,
         active: tab.id === activeTabId,
         run: () => pty().setActiveTab(tab.id),
@@ -66,16 +68,14 @@ function useActions(): PaletteAction[] {
         label: "New tab",
         hint: "⌘T",
         run: () => {
-          const s = pty();
-          const active = s.tabs.find((t) => t.id === s.activeTabId);
-          s.addTab(active?.cwd ?? null);
+          const leaf = getActiveLeaf();
+          pty().addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
         },
       },
       {
         id: "tab-close",
         group: "Tabs",
         label: "Close current tab",
-        hint: "⌘⇧W",
         run: () => {
           const s = pty();
           if (s.activeTabId) s.closeTab(s.activeTabId);
@@ -94,6 +94,36 @@ function useActions(): PaletteAction[] {
         label: "Previous tab",
         hint: "⌘⇧[",
         run: () => pty().cycleTab(-1),
+      },
+    );
+
+    actions.push(
+      {
+        id: "pane-split-right",
+        group: "Panes",
+        label: "Split pane right",
+        hint: "⌘D",
+        run: () => pty().splitPane("row"),
+      },
+      {
+        id: "pane-split-down",
+        group: "Panes",
+        label: "Split pane down",
+        hint: "⌘⇧D",
+        run: () => pty().splitPane("col"),
+      },
+      {
+        id: "pane-close",
+        group: "Panes",
+        label: "Close pane (last pane closes the tab)",
+        hint: "⌘⇧W",
+        run: () => pty().closeActivePane(),
+      },
+      {
+        id: "pane-next",
+        group: "Panes",
+        label: "Focus next pane",
+        run: () => pty().cyclePane(1),
       },
     );
 
