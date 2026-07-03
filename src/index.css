@@ -53,6 +53,219 @@ body {
   background-position: -1px -1px, -1px -1px, 0 0;
 }
 
+/* Ambient motion: the accent grid drifts diagonally, one cell per loop, so
+   the pattern tiles seamlessly. Enabled via html[data-ambient="1"]. */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-ambient="1"] #root {
+    animation: grid-drift 40s linear infinite;
+  }
+}
+
+@keyframes grid-drift {
+  to {
+    background-position:
+      27px 27px,
+      27px 27px,
+      0 0;
+  }
+}
+
+/* Floating glow orbs behind the translucent chrome (header + sidebars). */
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  filter: blur(90px);
+  opacity: 0.13;
+  will-change: transform;
+}
+
+.orb-a {
+  width: 42vw;
+  height: 42vw;
+  top: -18vw;
+  left: -12vw;
+  animation: orb-float-a 52s ease-in-out infinite alternate;
+}
+
+.orb-b {
+  width: 34vw;
+  height: 34vw;
+  bottom: -16vw;
+  right: -10vw;
+  filter: blur(90px) hue-rotate(45deg);
+  animation: orb-float-b 64s ease-in-out infinite alternate;
+}
+
+.orb-c {
+  width: 24vw;
+  height: 24vw;
+  top: 40%;
+  left: 55%;
+  opacity: 0.09;
+  filter: blur(80px) hue-rotate(-35deg);
+  animation: orb-float-c 76s ease-in-out infinite alternate;
+}
+
+@keyframes orb-float-a {
+  to {
+    transform: translate(16vw, 12vh) scale(1.15);
+  }
+}
+
+@keyframes orb-float-b {
+  to {
+    transform: translate(-14vw, -14vh) scale(0.9);
+  }
+}
+
+@keyframes orb-float-c {
+  to {
+    transform: translate(-10vw, 10vh) scale(1.2);
+  }
+}
+
+/* Retro CRT scanlines + vignette + faint flicker over the terminal area. */
+.crt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 62%,
+      rgba(0, 0, 0, 0.28) 100%
+    );
+  animation: crt-flicker 3.6s ease-in-out infinite;
+}
+
+@keyframes crt-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.94;
+  }
+  52% {
+    opacity: 0.98;
+  }
+}
+
+/* Header hairline: quiet gradient normally, sweeping shimmer while an
+   AI agent is running in the active tab. */
+.header-hairline {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-accent) 28%, transparent) 50%,
+    transparent
+  );
+}
+
+.agent-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 20%,
+    var(--color-accent) 45%,
+    color-mix(in srgb, var(--color-accent) 30%, white) 50%,
+    var(--color-accent) 55%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 2.4s linear infinite;
+}
+
+@keyframes shimmer-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Welcome-screen title: slow gradient sheen panning across the wordmark. */
+.title-shine {
+  background: linear-gradient(
+    100deg,
+    var(--color-ink) 0%,
+    var(--color-ink) 38%,
+    var(--color-accent) 50%,
+    var(--color-ink) 62%,
+    var(--color-ink) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: title-shine-pan 5.5s ease-in-out infinite;
+}
+
+@keyframes title-shine-pan {
+  0%,
+  25% {
+    background-position: 125% 0;
+  }
+  75%,
+  100% {
+    background-position: -25% 0;
+  }
+}
+
+/* Typewriter reveal for the welcome tagline. Width in ch must match the
+   text length so steps() lands exactly one character per step. */
+.type-in {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 37ch;
+  animation: typing 1.6s steps(37, end) 0.4s both;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 40px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 90px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(3px);
+  }
+}
+
+@keyframes dot-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 4px var(--color-accent);
+    opacity: 0.8;
+  }
+  50% {
+    box-shadow: 0 0 12px var(--color-accent);
+    opacity: 1;
+  }
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 32%, transparent);
 }

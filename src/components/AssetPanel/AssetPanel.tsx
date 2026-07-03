@@ -1,6 +1,8 @@
-import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openPath } from "@tauri-apps/plugin-opener";
 import {
   useClipboardStore,
   type ClipboardItem,
@@ -12,6 +14,15 @@ import {
 import { useActiveTab } from "../../stores/ptyStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { basename } from "../../lib/paths";
+
+interface LightboxData {
+  /** Full-resolution source (asset-protocol URL when a file path exists). */
+  src: string;
+  /** Data-URL preview to fall back to if the asset protocol refuses. */
+  fallbackSrc?: string;
+  path: string | null;
+  timestamp: number;
+}
 
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -34,6 +45,7 @@ export default function AssetPanel() {
   const removeShot = useScreenshotStore((s) => s.remove);
 
   const activeSessionId = useActiveTab()?.sessionId ?? null;
+  const [lightbox, setLightbox] = useState<LightboxData | null>(null);
 
   useEffect(() => {
     invoke<ClipboardItem[]>("clipboard_history")
@@ -101,14 +113,28 @@ export default function AssetPanel() {
           {clipItems.length === 0 ? (
             <Placeholder text="Copy text or an image to see it here." />
           ) : (
-            clipItems.map((item) => (
+            clipItems.map((item, i) => (
               <AssetCard
                 key={item.id}
+                index={i}
                 onClick={() => insertClipboard(item)}
                 onRemove={() => {
                   removeClip(item.id);
                   invoke("clipboard_remove", { id: item.id }).catch(() => {});
                 }}
+                onZoom={
+                  item.kind === "image"
+                    ? () =>
+                        setLightbox({
+                          src: item.image_path
+                            ? convertFileSrc(item.image_path)
+                            : item.preview,
+                          fallbackSrc: item.preview,
+                          path: item.image_path ?? null,
+                          timestamp: item.timestamp,
+                        })
+                    : undefined
+                }
                 kind={item.kind}
                 timestamp={item.timestamp}
               >
@@ -133,14 +159,23 @@ export default function AssetPanel() {
           {shots.length === 0 ? (
             <Placeholder text="Take a screenshot to have it appear here." />
           ) : (
-            shots.map((item) => (
+            shots.map((item, i) => (
               <AssetCard
                 key={item.id}
+                index={i}
                 onClick={() => writePath(item.path)}
                 onRemove={() => {
                   removeShot(item.id);
                   invoke("screenshot_remove", { id: item.id }).catch(() => {});
                 }}
+                onZoom={() =>
+                  setLightbox({
+                    src: convertFileSrc(item.path),
+                    fallbackSrc: item.thumbnail,
+                    path: item.path,
+                    timestamp: item.timestamp,
+                  })
+                }
                 kind="image"
                 timestamp={item.timestamp}
                 footer={
@@ -160,7 +195,104 @@ export default function AssetPanel() {
           )}
         </Section>
       </div>
+
+      {lightbox && (
+        <Lightbox
+          data={lightbox}
+          canInsert={Boolean(activeSessionId && lightbox.path)}
+          onInsert={() => {
+            if (lightbox.path) writePath(lightbox.path);
+            setLightbox(null);
+          }}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function Lightbox({
+  data,
+  canInsert,
+  onInsert,
+  onClose,
+}: {
+  data: LightboxData;
+  canInsert: boolean;
+  onInsert: () => void;
+  onClose: () => void;
+}) {
+  const [src, setSrc] = useState(data.src);
+
+  // Capture-phase Esc so it wins over the focused xterm textarea.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  const btn =
+    "h-7 px-3 rounded-md border border-edge text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40 disabled:pointer-events-none";
+
+  // Portal to <body>: the sidebar's backdrop-filter would otherwise become
+  // the containing block for this fixed overlay and clip it to the panel.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-md p-8 animate-[fade-in_0.12s_ease-out]"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <img
+        src={src}
+        alt="preview"
+        draggable={false}
+        onError={() => {
+          if (data.fallbackSrc && src !== data.fallbackSrc)
+            setSrc(data.fallbackSrc);
+        }}
+        className="max-h-[74vh] max-w-[88vw] rounded-xl border border-edge shadow-[0_24px_90px_rgba(0,0,0,0.6)] animate-[pop-in_0.16s_ease-out] object-contain"
+      />
+      <div className="flex items-center gap-2 rounded-xl border border-edge bg-raise/95 backdrop-blur-md px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] animate-[card-in_0.2s_ease-out]">
+        {data.path && (
+          <span
+            className="max-w-[280px] truncate font-mono text-[10px] text-faint"
+            title={data.path}
+          >
+            {basename(data.path)}
+          </span>
+        )}
+        <button className={btn} disabled={!canInsert} onClick={onInsert}>
+          Insert Path
+        </button>
+        <button
+          className={btn}
+          disabled={!data.path}
+          onClick={() =>
+            data.path && navigator.clipboard.writeText(data.path)
+          }
+        >
+          Copy Path
+        </button>
+        <button
+          className={btn}
+          disabled={!data.path}
+          onClick={() => data.path && openPath(data.path)}
+        >
+          Open
+        </button>
+        <button className={btn} onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -197,8 +329,10 @@ function Placeholder({ text }: { text: string }) {
 }
 
 interface AssetCardProps {
+  index: number;
   onClick: () => void;
   onRemove: () => void;
+  onZoom?: () => void;
   kind: "image" | "text";
   timestamp: number;
   footer?: React.ReactNode;
@@ -206,8 +340,10 @@ interface AssetCardProps {
 }
 
 function AssetCard({
+  index,
   onClick,
   onRemove,
+  onZoom,
   kind,
   timestamp,
   footer,
@@ -215,7 +351,8 @@ function AssetCard({
 }: AssetCardProps) {
   return (
     <div
-      className="group relative rounded-lg border border-edge bg-ink/[0.04] overflow-hidden cursor-pointer transition-[border-color,box-shadow] duration-150 hover:border-accent/50 hover:shadow-[0_2px_16px_rgba(0,0,0,0.35)] animate-[card-in_0.22s_ease-out]"
+      className="group relative rounded-lg border border-edge bg-ink/[0.04] overflow-hidden cursor-pointer transition-[border-color,box-shadow,transform] duration-150 hover:border-accent/50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 animate-[card-in_0.25s_ease-out_both]"
+      style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}
       onClick={onClick}
       title="Click to insert into terminal"
     >
@@ -230,6 +367,29 @@ function AssetCard({
       >
         ×
       </button>
+      {onZoom && (
+        <button
+          className="absolute top-1.5 left-1.5 w-5 h-5 grid place-items-center rounded-md bg-black/60 backdrop-blur-sm text-ink/70 opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color] duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            onZoom();
+          }}
+          title="Preview full size"
+        >
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M6.5 2.5h-4v4M9.5 13.5h4v-4M2.5 2.5 7 7M13.5 13.5 9 9" />
+          </svg>
+        </button>
+      )}
       <div className="h-6 px-2.5 flex items-center justify-between gap-2 text-[10px] text-faint border-t border-edge bg-ink/[0.02]">
         <span className="flex items-center gap-1.5">
           <span

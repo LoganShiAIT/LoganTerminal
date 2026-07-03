@@ -3,11 +3,14 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { usePtyStore } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { buildXtermTheme, buildSearchDecorations } from "../../themes";
+import { onTermCmd } from "../../lib/termBus";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -48,7 +51,9 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
         'ui-monospace, "Menlo", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
       fontSize: settings.fontSize,
       lineHeight: 1.2,
-      cursorBlink: true,
+      cursorBlink: settings.cursorBlink,
+      cursorStyle: settings.cursorStyle,
+      smoothScrollDuration: 120,
       allowProposedApi: true,
       theme: buildXtermTheme(settings.themeId, settings.accentOverride),
     });
@@ -57,7 +62,19 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
     term.loadAddon(new WebLinksAddon());
     const search = new SearchAddon();
     term.loadAddon(search);
+    // Correct emoji/CJK cell widths — AI CLIs print plenty of both.
+    term.loadAddon(new Unicode11Addon());
+    term.unicode.activeVersion = "11";
     term.open(container);
+    // GPU renderer; on context loss or unsupported WebGL2 xterm falls back
+    // to the DOM renderer, so failures here are non-fatal.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch (err) {
+      console.warn("WebGL renderer unavailable, using DOM renderer", err);
+    }
     termRef.current = term;
     searchRef.current = search;
 
@@ -167,6 +184,32 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
       ) {
         term.options.theme = buildXtermTheme(s.themeId, s.accentOverride);
       }
+      if (s.cursorStyle !== prev.cursorStyle) {
+        term.options.cursorStyle = s.cursorStyle;
+      }
+      if (s.cursorBlink !== prev.cursorBlink) {
+        term.options.cursorBlink = s.cursorBlink;
+      }
+    });
+
+    // Chrome UI (command palette, header buttons) drives the active terminal
+    // through the term bus rather than reaching into this component.
+    const unsubTermCmd = onTermCmd((cmd) => {
+      if (!activeRef.current) return;
+      switch (cmd) {
+        case "clear":
+          term.clear();
+          break;
+        case "find":
+          setSearchOpen(true);
+          break;
+        case "scroll-bottom":
+          term.scrollToBottom();
+          break;
+        case "focus":
+          term.focus();
+          break;
+      }
     });
 
     const onKey = (e: KeyboardEvent) => {
@@ -199,6 +242,7 @@ export default function Terminal({ tabId, active, initialCwd }: TerminalProps) {
       disposed = true;
       ro.disconnect();
       unsubSettings();
+      unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
       unlistenData?.();

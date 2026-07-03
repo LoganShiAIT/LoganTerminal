@@ -186,13 +186,14 @@ export default function FileTree() {
             {error}
           </li>
         )}
-        {entries.map((e) => {
+        {entries.map((e, i) => {
           const full = joinPath(cwd, e.name);
           const hidden = e.name.startsWith(".");
           return (
             <li
-              key={e.name}
-              className="group mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100"
+              key={full}
+              style={{ animationDelay: `${Math.min(i * 12, 200)}ms` }}
+              className="group mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100 animate-[card-in_0.18s_ease-out_both]"
               onClick={() => {
                 if (e.is_dir) setCwd(full);
                 else insertPath(full);

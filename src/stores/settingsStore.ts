@@ -5,10 +5,16 @@ export const MIN_FONT_SIZE = 9;
 export const MAX_FONT_SIZE = 28;
 export const DEFAULT_FONT_SIZE = 13;
 
+export type CursorStyle = "block" | "bar" | "underline";
+
 const FONT_SIZE_KEY = "logan.fontSize";
 const SHOW_HIDDEN_KEY = "logan.showHiddenFiles";
 const THEME_KEY = "logan.theme";
 const ACCENT_KEY = "logan.accent";
+const CURSOR_STYLE_KEY = "logan.cursorStyle";
+const CURSOR_BLINK_KEY = "logan.cursorBlink";
+const AMBIENT_KEY = "logan.ambientMotion";
+const CRT_KEY = "logan.crt";
 
 function loadFontSize(): number {
   const raw = localStorage.getItem(FONT_SIZE_KEY);
@@ -28,12 +34,33 @@ function loadAccent(): string | null {
   return raw && /^#[0-9a-f]{6}$/i.test(raw) ? raw : null;
 }
 
+function loadCursorStyle(): CursorStyle {
+  const raw = localStorage.getItem(CURSOR_STYLE_KEY);
+  return raw === "bar" || raw === "underline" ? raw : "block";
+}
+
+function loadBool(key: string, fallback: boolean): boolean {
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : raw === "1";
+}
+
+/** The grid-drift animation is pure CSS, keyed off this html attribute. */
+function applyAmbientAttr(on: boolean) {
+  document.documentElement.dataset.ambient = on ? "1" : "0";
+}
+
 interface SettingsStore {
   fontSize: number;
   showHiddenFiles: boolean;
   themeId: string;
   /** Accent color overriding the theme's own; null = theme default. */
   accentOverride: string | null;
+  cursorStyle: CursorStyle;
+  cursorBlink: boolean;
+  /** Drifting grid + floating glow orbs behind the chrome. */
+  ambientMotion: boolean;
+  /** Retro scanline overlay on the terminal area. */
+  crtMode: boolean;
   /** Settings panel visibility — UI state, not persisted. */
   panelOpen: boolean;
   bumpFontSize: (delta: number) => void;
@@ -41,6 +68,10 @@ interface SettingsStore {
   toggleHiddenFiles: () => void;
   setTheme: (id: string) => void;
   setAccentOverride: (color: string | null) => void;
+  setCursorStyle: (style: CursorStyle) => void;
+  toggleCursorBlink: () => void;
+  toggleAmbientMotion: () => void;
+  toggleCrtMode: () => void;
   setPanelOpen: (open: boolean) => void;
 }
 
@@ -49,6 +80,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   showHiddenFiles: localStorage.getItem(SHOW_HIDDEN_KEY) === "1",
   themeId: loadThemeId(),
   accentOverride: loadAccent(),
+  cursorStyle: loadCursorStyle(),
+  cursorBlink: loadBool(CURSOR_BLINK_KEY, true),
+  ambientMotion: loadBool(AMBIENT_KEY, true),
+  crtMode: loadBool(CRT_KEY, false),
   panelOpen: false,
   bumpFontSize: (delta) => {
     const next = Math.max(
@@ -79,6 +114,26 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ accentOverride: color });
     applyTheme(getTheme(get().themeId), color);
   },
+  setCursorStyle: (style) => {
+    localStorage.setItem(CURSOR_STYLE_KEY, style);
+    set({ cursorStyle: style });
+  },
+  toggleCursorBlink: () => {
+    const next = !get().cursorBlink;
+    localStorage.setItem(CURSOR_BLINK_KEY, next ? "1" : "0");
+    set({ cursorBlink: next });
+  },
+  toggleAmbientMotion: () => {
+    const next = !get().ambientMotion;
+    localStorage.setItem(AMBIENT_KEY, next ? "1" : "0");
+    applyAmbientAttr(next);
+    set({ ambientMotion: next });
+  },
+  toggleCrtMode: () => {
+    const next = !get().crtMode;
+    localStorage.setItem(CRT_KEY, next ? "1" : "0");
+    set({ crtMode: next });
+  },
   setPanelOpen: (open) => set({ panelOpen: open }),
 }));
 
@@ -86,4 +141,5 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 {
   const s = useSettingsStore.getState();
   applyTheme(getTheme(s.themeId), s.accentOverride);
+  applyAmbientAttr(s.ambientMotion);
 }

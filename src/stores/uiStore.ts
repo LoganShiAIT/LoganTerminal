@@ -8,11 +8,14 @@ interface UiStore {
   leftSidebarWidth: number;
   rightSidebarWidth: number;
   rightPanelTab: RightPanelTab;
+  /** Command palette visibility — UI state, not persisted. */
+  paletteOpen: boolean;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   setLeftSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   setRightPanelTab: (tab: RightPanelTab) => void;
+  setPaletteOpen: (open: boolean) => void;
 }
 
 const UI_KEY = "logan.uiLayout";
@@ -85,6 +88,7 @@ const initial = loadLayout() ?? {
 
 export const useUiStore = create<UiStore>((set) => ({
   ...initial,
+  paletteOpen: false,
   toggleLeftSidebar: () =>
     set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
   toggleRightSidebar: () =>
@@ -98,6 +102,7 @@ export const useUiStore = create<UiStore>((set) => ({
       rightSidebarWidth: clamp(width, RIGHT_SIDEBAR_MIN, RIGHT_SIDEBAR_MAX),
     }),
   setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 }));
 
 useUiStore.subscribe(saveLayout);

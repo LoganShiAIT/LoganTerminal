@@ -7,6 +7,7 @@ import RightPanel from "./components/RightPanel/RightPanel";
 import DropOverlay from "./components/DropOverlay/DropOverlay";
 import TabBar from "./components/TabBar/TabBar";
 import SettingsPanel from "./components/Settings/SettingsPanel";
+import CommandPalette from "./components/CommandPalette/CommandPalette";
 import { usePtyStore, useActiveTab } from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
@@ -103,6 +104,16 @@ export default function App() {
         e.preventDefault();
         const settings = useSettingsStore.getState();
         settings.setPanelOpen(!settings.panelOpen);
+      } else if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        ui.setPaletteOpen(!ui.paletteOpen);
+      } else if ((e.key === "b" || e.key === "B") && !e.shiftKey) {
+        e.preventDefault();
+        useUiStore.getState().toggleLeftSidebar();
+      } else if ((e.key === "j" || e.key === "J") && !e.shiftKey) {
+        e.preventDefault();
+        useUiStore.getState().toggleRightSidebar();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -111,9 +122,10 @@ export default function App() {
 
   return (
     <div className="relative flex h-screen w-screen flex-col select-none text-ink">
+      <AmbientOrbs />
       <header
         data-tauri-drag-region
-        className={`h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
+        className={`relative h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
           isMac ? "pl-20" : "pl-2"
         }`}
       >
@@ -148,6 +160,7 @@ export default function App() {
         >
           <GearIcon />
         </button>
+        <AgentHairline />
       </header>
 
       <div className="flex flex-1 min-h-0">
@@ -191,6 +204,7 @@ export default function App() {
               </div>
             ))
           )}
+          <CrtOverlay />
         </main>
 
         <ResizeHandle side="right" active={rightSidebarOpen} />
@@ -217,7 +231,43 @@ export default function App() {
 
       <DropOverlay />
       <SettingsPanel />
+      <CommandPalette />
     </div>
+  );
+}
+
+function AmbientOrbs() {
+  const ambient = useSettingsStore((s) => s.ambientMotion);
+  if (!ambient) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 overflow-hidden motion-reduce:hidden"
+      aria-hidden
+    >
+      <div className="orb orb-a" />
+      <div className="orb orb-b" />
+      <div className="orb orb-c" />
+    </div>
+  );
+}
+
+function CrtOverlay() {
+  const crt = useSettingsStore((s) => s.crtMode);
+  if (!crt) return null;
+  return <div className="crt-overlay" aria-hidden />;
+}
+
+/** Hairline under the header; sweeps with light while an agent is running. */
+function AgentHairline() {
+  const activeTab = useActiveTab();
+  const agentLive = Boolean(activeTab?.agentName) && !activeTab?.exited;
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-x-0 -bottom-px ${
+        agentLive ? "h-[2px] agent-shimmer" : "h-px header-hairline"
+      }`}
+    />
   );
 }
 
@@ -358,25 +408,30 @@ function StatusCluster() {
 function WelcomeScreen() {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-7">
-      <div className="flex items-end gap-1.5 font-mono text-4xl text-accent">
-        ❯
-        <span className="inline-block w-[0.55em] h-[1.05em] rounded-[2px] bg-accent/85 animate-[cursor-blink_1.1s_steps(1)_infinite]" />
+      <div className="grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 bg-raise/50 backdrop-blur-sm animate-[glow-breathe_4.5s_ease-in-out_infinite]">
+        <div className="flex items-end gap-1.5 font-mono text-3xl text-accent">
+          ❯
+          <span className="inline-block w-[0.55em] h-[1.05em] rounded-[2px] bg-accent/85 animate-[cursor-blink_1.1s_steps(1)_infinite]" />
+        </div>
       </div>
-      <div className="text-center space-y-1.5">
-        <div className="text-sm font-semibold uppercase tracking-[0.3em] text-ink/90">
+      <div className="text-center space-y-2">
+        <div className="title-shine text-base font-bold uppercase tracking-[0.32em]">
           LoganTerminal
         </div>
-        <div className="text-xs text-muted">
-          a terminal built for AI coding agents
+        <div className="font-mono text-xs text-muted">
+          <span className="type-in">a terminal built for AI coding agents</span>
         </div>
       </div>
       <button
-        className="px-4 py-1.5 rounded-full border border-accent/40 text-accent text-sm hover:bg-accent/10 hover:border-accent/70 transition-colors"
+        className="px-4 py-1.5 rounded-full border border-accent/40 text-accent text-sm hover:bg-accent/10 hover:border-accent/70 hover:shadow-[0_0_24px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] transition-[color,border-color,box-shadow]"
         onClick={() => usePtyStore.getState().addTab()}
       >
         New Terminal
       </button>
-      <div className="flex items-center gap-4 text-[11px] text-faint">
+      <div className="flex max-w-[80%] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-faint">
+        <span className="flex items-center gap-1.5">
+          <span className="kbd">⌘P</span> commands
+        </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘T</span> new tab
         </span>
@@ -387,7 +442,10 @@ function WelcomeScreen() {
           <span className="kbd">⌘K</span> clear
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘±</span> font size
+          <span className="kbd">⌘B</span> files
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="kbd">⌘J</span> assets
         </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘1-9</span> jump

@@ -19,6 +19,7 @@ interface PtyStore {
   addTab: (initialCwd?: string | null) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
+  moveTab: (from: number, to: number) => void;
   cycleTab: (dir: 1 | -1) => void;
   jumpToTab: (index: number) => void;
   setSessionId: (tabId: string, sessionId: string | null) => void;
@@ -106,6 +107,22 @@ export const usePtyStore = create<PtyStore>((set, get) => ({
 
   setActiveTab: (id) =>
     set((s) => ({ activeTabId: id, tabs: withUnreadCleared(s.tabs, id) })),
+
+  moveTab: (from, to) =>
+    set((s) => {
+      if (
+        from === to ||
+        from < 0 ||
+        to < 0 ||
+        from >= s.tabs.length ||
+        to >= s.tabs.length
+      )
+        return s;
+      const tabs = [...s.tabs];
+      const [moved] = tabs.splice(from, 1);
+      tabs.splice(to, 0, moved);
+      return { tabs };
+    }),
 
   cycleTab: (dir) => {
     const { tabs, activeTabId } = get();

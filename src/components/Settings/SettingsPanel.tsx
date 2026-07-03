@@ -4,6 +4,7 @@ import {
   MIN_FONT_SIZE,
   MAX_FONT_SIZE,
   DEFAULT_FONT_SIZE,
+  type CursorStyle,
 } from "../../stores/settingsStore";
 import { THEMES } from "../../themes";
 
@@ -61,11 +62,14 @@ export default function SettingsPanel() {
           <ThemeSection />
           <AccentSection />
           <FontSizeSection />
+          <CursorSection />
+          <EffectsSection />
           <FilesSection />
         </div>
 
         <div className="px-5 pb-4 text-[10px] text-faint">
-          Changes apply instantly and are remembered across restarts.
+          Changes apply instantly and are remembered across restarts. Tip:
+          everything here is also in the command palette (⌘P).
         </div>
       </div>
     </div>
@@ -240,6 +244,112 @@ function FontSizeSection() {
   );
 }
 
+function ToggleRow({
+  checked,
+  onToggle,
+  label,
+  title,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <button
+      className="flex items-center gap-2.5 group"
+      onClick={onToggle}
+      title={title}
+    >
+      <span
+        className={`w-8 h-[18px] rounded-full p-[2px] transition-colors ${
+          checked ? "bg-accent" : "bg-ink/15 group-hover:bg-ink/25"
+        }`}
+      >
+        <span
+          className={`block w-[14px] h-[14px] rounded-full bg-white/95 transition-transform ${
+            checked ? "translate-x-[14px]" : ""
+          }`}
+        />
+      </span>
+      <span className="text-xs text-ink/85">{label}</span>
+    </button>
+  );
+}
+
+function CursorSection() {
+  const cursorStyle = useSettingsStore((s) => s.cursorStyle);
+  const setCursorStyle = useSettingsStore((s) => s.setCursorStyle);
+  const cursorBlink = useSettingsStore((s) => s.cursorBlink);
+  const toggleBlink = useSettingsStore((s) => s.toggleCursorBlink);
+
+  const styles: Array<{ id: CursorStyle; name: string; glyph: string }> = [
+    { id: "block", name: "Block", glyph: "▮" },
+    { id: "bar", name: "Bar", glyph: "▏" },
+    { id: "underline", name: "Underline", glyph: "▁" },
+  ];
+
+  return (
+    <div>
+      <SectionLabel>Cursor</SectionLabel>
+      <div className="flex items-center gap-2 flex-wrap">
+        {styles.map((s) => {
+          const selected = s.id === cursorStyle;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setCursorStyle(s.id)}
+              className={`h-8 px-3 rounded-md border flex items-center gap-2 text-[11px] transition-colors ${
+                selected
+                  ? "border-accent text-accent bg-accent/10"
+                  : "border-edge text-muted hover:text-ink hover:border-accent/40"
+              }`}
+            >
+              <span className="font-mono text-[13px] leading-none">
+                {s.glyph}
+              </span>
+              {s.name}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2.5">
+        <ToggleRow
+          checked={cursorBlink}
+          onToggle={toggleBlink}
+          label="Blinking cursor"
+        />
+      </div>
+    </div>
+  );
+}
+
+function EffectsSection() {
+  const ambientMotion = useSettingsStore((s) => s.ambientMotion);
+  const toggleAmbient = useSettingsStore((s) => s.toggleAmbientMotion);
+  const crtMode = useSettingsStore((s) => s.crtMode);
+  const toggleCrt = useSettingsStore((s) => s.toggleCrtMode);
+
+  return (
+    <div>
+      <SectionLabel>Effects</SectionLabel>
+      <div className="space-y-2.5">
+        <ToggleRow
+          checked={ambientMotion}
+          onToggle={toggleAmbient}
+          label="Ambient motion — drifting grid & floating glow"
+          title="Respects the system reduced-motion preference"
+        />
+        <ToggleRow
+          checked={crtMode}
+          onToggle={toggleCrt}
+          label="CRT mode — retro scanlines over the terminal"
+        />
+      </div>
+    </div>
+  );
+}
+
 function FilesSection() {
   const showHidden = useSettingsStore((s) => s.showHiddenFiles);
   const toggle = useSettingsStore((s) => s.toggleHiddenFiles);
@@ -247,26 +357,12 @@ function FilesSection() {
   return (
     <div>
       <SectionLabel>Files</SectionLabel>
-      <button
-        className="flex items-center gap-2.5 group"
-        onClick={toggle}
+      <ToggleRow
+        checked={showHidden}
+        onToggle={toggle}
+        label="Show hidden files (dotfiles) in the file tree"
         title="Also affects the eye button in the file tree"
-      >
-        <span
-          className={`w-8 h-[18px] rounded-full p-[2px] transition-colors ${
-            showHidden ? "bg-accent" : "bg-ink/15 group-hover:bg-ink/25"
-          }`}
-        >
-          <span
-            className={`block w-[14px] h-[14px] rounded-full bg-white/95 transition-transform ${
-              showHidden ? "translate-x-[14px]" : ""
-            }`}
-          />
-        </span>
-        <span className="text-xs text-ink/85">
-          Show hidden files (dotfiles) in the file tree
-        </span>
-      </button>
+      />
     </div>
   );
 }

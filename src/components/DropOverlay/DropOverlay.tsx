@@ -17,7 +17,7 @@ export default function DropOverlay() {
 
   return (
     <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center p-8 bg-accent/10 backdrop-blur-sm animate-[fade-in_0.15s_ease-out]">
-      <div className="border-2 border-dashed border-accent rounded-2xl px-8 py-6 bg-panel/90 shadow-[0_0_60px_color-mix(in_srgb,var(--color-accent)_15%,transparent)] max-w-[80%] animate-[pop-in_0.18s_ease-out]">
+      <div className="border-2 border-dashed border-accent rounded-2xl px-8 py-6 bg-panel/90 max-w-[80%] animate-[pop-in_0.18s_ease-out,glow-breathe_2.6s_ease-in-out_infinite]">
         <div className="text-accent text-sm font-semibold tracking-[0.15em] uppercase mb-3">
           Drop to attach
         </div>
@@ -26,12 +26,13 @@ export default function DropOverlay() {
         </div>
         {images.length > 0 && (
           <div className="flex gap-2 mb-3 flex-wrap">
-            {images.map((p) => (
+            {images.map((p, i) => (
               <img
                 key={p}
                 src={convertFileSrc(p)}
                 alt=""
-                className="w-24 h-24 object-cover rounded-lg border border-edge shadow-lg shadow-black/30"
+                className="w-24 h-24 object-cover rounded-lg border border-edge shadow-lg shadow-black/30 animate-[pop-in_0.22s_ease-out_both]"
+                style={{ animationDelay: `${i * 50}ms` }}
                 draggable={false}
               />
             ))}
