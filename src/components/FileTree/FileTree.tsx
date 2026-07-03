@@ -4,6 +4,7 @@ import { useActiveTab } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { homeDir, tildify, joinPath, parentOf } from "../../lib/paths";
+import { attachReviewPaths } from "../../lib/reviewAttachments";
 
 interface FsEntry {
   name: string;
@@ -191,16 +192,16 @@ export default function FileTree() {
           return (
             <li
               key={e.name}
-              className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100"
+              className="group mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100"
               onClick={() => {
                 if (e.is_dir) setCwd(full);
                 else insertPath(full);
               }}
               title={e.is_dir ? `${e.name} — open` : `${e.name} — insert path`}
-            >
-              {e.is_dir ? <FolderIcon /> : <FileIcon />}
-              <span
-                className={`truncate ${
+              >
+                {e.is_dir ? <FolderIcon /> : <FileIcon />}
+                <span
+                  className={`min-w-0 flex-1 truncate ${
                   e.is_dir
                     ? hidden
                       ? "text-ink/60"
@@ -212,6 +213,18 @@ export default function FileTree() {
               >
                 {e.name}
               </span>
+              <button
+                className="h-5 w-5 shrink-0 rounded text-faint opacity-0 transition-colors hover:bg-ink/10 hover:text-accent group-hover:opacity-100"
+                title="Attach to review"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  attachReviewPaths([full]).catch((err) =>
+                    console.error("attachReviewPaths failed", err),
+                  );
+                }}
+              >
+                +
+              </button>
             </li>
           );
         })}

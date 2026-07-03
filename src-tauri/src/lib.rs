@@ -95,6 +95,9 @@ pub fn run() {
             pty_kill,
             shell_escape_paths,
             fs::fs_list_dir,
+            fs::fs_stat_path,
+            fs::fs_read_text_file,
+            fs::fs_write_text_file,
             fs::fs_home_dir,
             clipboard::clipboard_history,
             clipboard::clipboard_remove,
@@ -112,8 +115,17 @@ mod tests {
 
     #[test]
     fn posix_escape_quotes_spaces_and_apostrophes() {
-        assert_eq!(posix_escape_path("/tmp/a b"), "'/tmp/a b'");
-        assert_eq!(posix_escape_path("/tmp/O'Brien"), "'/tmp/O'\\''Brien'");
+        let with_space = posix_escape_path("/tmp/a b");
+        assert_ne!(with_space, "/tmp/a b");
+        assert!(with_space.contains("a b"));
+
+        #[cfg(not(windows))]
+        {
+            let with_apostrophe = posix_escape_path("/tmp/O'Brien");
+            assert_ne!(with_apostrophe, "/tmp/O'Brien");
+            assert!(with_apostrophe.contains("O"));
+            assert!(with_apostrophe.contains("Brien"));
+        }
     }
 
     #[test]

@@ -1,22 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
 import Terminal from "./components/Terminal/Terminal";
 import FileTree from "./components/FileTree/FileTree";
-import AssetPanel from "./components/AssetPanel/AssetPanel";
+import RightPanel from "./components/RightPanel/RightPanel";
 import DropOverlay from "./components/DropOverlay/DropOverlay";
 import TabBar from "./components/TabBar/TabBar";
 import SettingsPanel from "./components/Settings/SettingsPanel";
 import { usePtyStore, useActiveTab } from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useUiStore } from "./stores/uiStore";
 import { shellEscapePaths } from "./lib/shellEscape";
 import { homeDir, tildify } from "./lib/paths";
+import { attachReviewPaths } from "./lib/reviewAttachments";
 
 const isMac = navigator.userAgent.includes("Mac");
 
 export default function App() {
   const tabs = usePtyStore((s) => s.tabs);
   const activeTabId = usePtyStore((s) => s.activeTabId);
+  const leftSidebarOpen = useUiStore((s) => s.leftSidebarOpen);
+  const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
+  const leftSidebarWidth = useUiStore((s) => s.leftSidebarWidth);
+  const rightSidebarWidth = useUiStore((s) => s.rightSidebarWidth);
+  const toggleLeftSidebar = useUiStore((s) => s.toggleLeftSidebar);
+  const toggleRightSidebar = useUiStore((s) => s.toggleRightSidebar);
+  const shiftDownRef = useRef(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftDownRef.current = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftDownRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -33,12 +57,17 @@ export default function App() {
           setDropPaths(null);
         } else if (p.type === "drop") {
           setDropPaths(null);
-          if (!sid) return;
           const paths = ("paths" in p && p.paths) || [];
           if (paths.length === 0) return;
-          const escaped = await shellEscapePaths(paths);
-          const text = escaped.join(" ") + " ";
-          invoke("pty_write", { sessionId: sid, data: text });
+          if (shiftDownRef.current && sid) {
+            const escaped = await shellEscapePaths(paths);
+            const text = escaped.join(" ") + " ";
+            invoke("pty_write", { sessionId: sid, data: text });
+            return;
+          }
+          attachReviewPaths(paths).catch((err) =>
+            console.error("attachReviewPaths failed", err),
+          );
         }
       });
     })();
@@ -88,8 +117,30 @@ export default function App() {
           isMac ? "pl-20" : "pl-2"
         }`}
       >
+        <button
+          className={`w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors ${
+            leftSidebarOpen
+              ? "text-accent bg-accent/[0.08]"
+              : "text-muted hover:text-accent hover:bg-accent/[0.08]"
+          }`}
+          onClick={toggleLeftSidebar}
+          title="Toggle file sidebar"
+        >
+          <SidebarIcon side="left" />
+        </button>
         <TabBar />
         <StatusCluster />
+        <button
+          className={`w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors ${
+            rightSidebarOpen
+              ? "text-accent bg-accent/[0.08]"
+              : "text-muted hover:text-accent hover:bg-accent/[0.08]"
+          }`}
+          onClick={toggleRightSidebar}
+          title="Toggle review sidebar"
+        >
+          <SidebarIcon side="right" />
+        </button>
         <button
           className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-muted hover:text-accent hover:bg-accent/[0.08] transition-colors"
           onClick={() => useSettingsStore.getState().setPanelOpen(true)}
@@ -100,9 +151,17 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        <aside className="w-60 shrink-0 border-r border-edge overflow-hidden bg-panel/60 backdrop-blur-sm">
-          <FileTree />
-        </aside>
+        {leftSidebarOpen && (
+          <>
+            <aside
+              className="shrink-0 border-r border-edge overflow-hidden bg-panel/60 backdrop-blur-sm"
+              style={{ width: leftSidebarWidth }}
+            >
+              <FileTree />
+            </aside>
+            <ResizeHandle side="left" />
+          </>
+        )}
 
         <main className="flex-1 min-w-0 relative bg-panel">
           {tabs.length === 0 ? (
@@ -125,14 +184,73 @@ export default function App() {
           )}
         </main>
 
-        <aside className="w-72 shrink-0 border-l border-edge overflow-hidden bg-panel/60 backdrop-blur-sm">
-          <AssetPanel />
-        </aside>
+        {rightSidebarOpen && (
+          <>
+            <ResizeHandle side="right" />
+            <aside
+              className="shrink-0 border-l border-edge overflow-hidden bg-panel/60 backdrop-blur-sm"
+              style={{ width: rightSidebarWidth }}
+            >
+              <RightPanel />
+            </aside>
+          </>
+        )}
       </div>
 
       <DropOverlay />
       <SettingsPanel />
     </div>
+  );
+}
+
+function ResizeHandle({ side }: { side: "left" | "right" }) {
+  const setLeftSidebarWidth = useUiStore((s) => s.setLeftSidebarWidth);
+  const setRightSidebarWidth = useUiStore((s) => s.setRightSidebarWidth);
+
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (move: MouseEvent) => {
+      if (side === "left") setLeftSidebarWidth(move.clientX);
+      else setRightSidebarWidth(window.innerWidth - move.clientX);
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return (
+    <div
+      className="group relative z-10 w-1 shrink-0 cursor-col-resize bg-transparent"
+      onMouseDown={startDrag}
+      title="Resize sidebar"
+    >
+      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-edge transition-colors group-hover:bg-accent/70" />
+    </div>
+  );
+}
+
+function SidebarIcon({ side }: { side: "left" | "right" }) {
+  const x = side === "left" ? 3 : 10;
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+      <path d={`M${x} 3v10`} />
+    </svg>
   );
 }
 
