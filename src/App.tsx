@@ -144,6 +144,11 @@ export default function App() {
         e.preventDefault();
         store.splitPane(e.shiftKey ? "col" : "row");
         requestAnimationFrame(() => sendTermCmd("focus"));
+      } else if ((e.key === "z" || e.key === "Z") && e.shiftKey) {
+        // Matches WezTerm's default TogglePaneZoomState binding.
+        e.preventDefault();
+        store.toggleZoom();
+        requestAnimationFrame(() => sendTermCmd("focus"));
       } else if (e.altKey && e.key.startsWith("Arrow")) {
         e.preventDefault();
         focusDirectionalPane(
@@ -435,6 +440,16 @@ function StatusCluster() {
           {pane.agentName}
         </span>
       )}
+      {/* Only surface anomalies — a clean exit says nothing here. Requires
+          zsh shell integration (OSC 133); silently absent otherwise. */}
+      {!exited && pane?.lastExitCode != null && pane.lastExitCode !== 0 && (
+        <span
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-red-300 bg-red-500/15 border border-red-400/40"
+          title="Last command's exit status"
+        >
+          exit {pane.lastExitCode}
+        </span>
+      )}
       <span
         className="flex items-center gap-1.5 font-mono text-[11px] text-muted"
         title={
@@ -502,10 +517,16 @@ function WelcomeScreen() {
           <span className="kbd">⌘D</span> split
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="kbd">⌘⇧Z</span> zoom pane
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="kbd">⌘F</span> find
         </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘K</span> clear
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="kbd">⌘↑↓</span> jump prompts
         </span>
         <span className="flex items-center gap-1.5">
           <span className="kbd">⌘B</span> files

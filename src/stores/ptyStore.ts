@@ -10,6 +10,14 @@ export interface LeafPane {
   initialCwd: string | null;
   /** The shell process ended; the pane stays visible but accepts no input. */
   exited: boolean;
+  /**
+   * Exit code of the last completed command (OSC 133;D via shell
+   * integration, zsh only — see Terminal.tsx). Null while a command is
+   * running or none has finished yet.
+   */
+  lastExitCode: number | null;
+  /** Output arrived while this pane wasn't the focused one; see markUnread. */
+  unread: boolean;
 }
 
 export interface SplitPane {
@@ -31,6 +39,8 @@ export interface PtyTab {
   activePaneId: string;
   /** Output arrived while the tab was in the background; cleared on activation. */
   unread: boolean;
+  /** Non-null while one pane is temporarily maximized (⌘⇧Z) over its siblings. */
+  zoomedPaneId: string | null;
 }
 
 export const MAX_PANES_PER_TAB = 8;
@@ -50,6 +60,8 @@ function makeLeaf(initialCwd: string | null = null): LeafPane {
     agentName: null,
     initialCwd,
     exited: false,
+    lastExitCode: null,
+    unread: false,
   };
 }
 
@@ -59,6 +71,7 @@ function makeTab(root: PaneNode): PtyTab {
     root,
     activePaneId: firstLeaf(root).id,
     unread: false,
+    zoomedPaneId: null,
   };
 }
 
@@ -175,19 +188,31 @@ interface PtyStore {
   closeActivePane: () => void;
   setActivePane: (tabId: string, paneId: string) => void;
   cyclePane: (dir: 1 | -1) => void;
+  /** Toggle maximizing the active tab's focused pane over its siblings. */
+  toggleZoom: () => void;
   setSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
   setAgentName: (paneId: string, name: string | null) => void;
-  markUnread: (tabId: string) => void;
+  setLastExitCode: (paneId: string, code: number | null) => void;
+  markUnread: (tabId: string, paneId: string) => void;
   markPaneExited: (paneId: string) => void;
   setDropPaths: (paths: string[] | null) => void;
 }
 
+/**
+ * On activating a tab, clear its tab-level dot AND its focused pane's dot
+ * (that pane is now being watched) — but leave any other background pane's
+ * dot alone until the user actually focuses it.
+ */
 function withUnreadCleared(tabs: PtyTab[], activeId: string | null): PtyTab[] {
-  return tabs.map((t) =>
-    t.id === activeId && t.unread ? { ...t, unread: false } : t,
-  );
+  return tabs.map((t) => {
+    if (t.id !== activeId) return t;
+    const root = updateLeafIn(t.root, t.activePaneId, (l) =>
+      l.unread ? { ...l, unread: false } : l,
+    );
+    return !t.unread && root === t.root ? t : { ...t, unread: false, root };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +369,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         if (root === tab.root) return s;
         return {
           tabs: s.tabs.map((t) =>
-            t.id === tab.id ? { ...t, root, activePaneId: newLeaf.id } : t,
+            t.id === tab.id
+              ? { ...t, root, activePaneId: newLeaf.id, zoomedPaneId: null }
+              : t,
           ),
         };
       }),
@@ -371,18 +398,21 @@ export const usePtyStore = create<PtyStore>((set, get) => {
           const root = removeLeafFrom(t.root, paneId);
           if (root === null || root === t.root) return t;
           const nextActive = sibling ? firstLeaf(sibling).id : firstLeaf(root).id;
-          return { ...t, root, activePaneId: nextActive };
+          return { ...t, root, activePaneId: nextActive, zoomedPaneId: null };
         }),
       }));
     },
 
     setActivePane: (tabId, paneId) =>
       set((s) => ({
-        tabs: s.tabs.map((t) =>
-          t.id === tabId && t.activePaneId !== paneId
-            ? { ...t, activePaneId: paneId }
-            : t,
-        ),
+        tabs: s.tabs.map((t) => {
+          if (t.id !== tabId) return t;
+          const root = updateLeafIn(t.root, paneId, (l) =>
+            l.unread ? { ...l, unread: false } : l,
+          );
+          if (t.activePaneId === paneId && root === t.root) return t;
+          return { ...t, activePaneId: paneId, root };
+        }),
       })),
 
     cyclePane: (dir) => {
@@ -395,6 +425,16 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       const next = leaves[(idx + dir + leaves.length) % leaves.length];
       get().setActivePane(tab.id, next.id);
     },
+
+    toggleZoom: () =>
+      set((s) => {
+        const tab = s.tabs.find((t) => t.id === s.activeTabId);
+        if (!tab || tab.root.type === "leaf") return s;
+        const zoomedPaneId = tab.zoomedPaneId ? null : tab.activePaneId;
+        return {
+          tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, zoomedPaneId } : t)),
+        };
+      }),
 
     setSplitRatio: (tabId, splitId, ratio) =>
       set((s) => ({
@@ -415,14 +455,33 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         l.agentName === agentName ? l : { ...l, agentName },
       ),
 
-    markUnread: (tabId) =>
+    setLastExitCode: (paneId, lastExitCode) =>
+      updatePane(paneId, (l) =>
+        l.lastExitCode === lastExitCode ? l : { ...l, lastExitCode },
+      ),
+
+    markUnread: (tabId, paneId) =>
       set((s) => {
-        // The active tab is being watched — only background output counts.
-        const tab = s.tabs.find((t) => t.id === tabId);
-        if (!tab || tab.unread || tabId === s.activeTabId) return s;
-        return {
-          tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, unread: true } : t)),
-        };
+        const tabIdx = s.tabs.findIndex((t) => t.id === tabId);
+        if (tabIdx === -1) return s;
+        const tab = s.tabs[tabIdx];
+        const tabIsActive = tabId === s.activeTabId;
+        const paneIsFocused = paneId === tab.activePaneId;
+        // Both true: this exact pane is the one being watched right now.
+        if (tabIsActive && paneIsFocused) return s;
+
+        const root = updateLeafIn(tab.root, paneId, (l) =>
+          l.unread ? l : { ...l, unread: true },
+        );
+        // Tab-level dot keeps its pre-existing meaning: "the whole tab was
+        // in the background" — untouched when the tab itself is active,
+        // even if a non-focused sibling pane just produced output.
+        const nextTabUnread = tabIsActive ? tab.unread : true;
+        if (root === tab.root && nextTabUnread === tab.unread) return s;
+
+        const tabs = [...s.tabs];
+        tabs[tabIdx] = { ...tab, root, unread: nextTabUnread };
+        return { tabs };
       }),
 
     markPaneExited: (paneId) =>

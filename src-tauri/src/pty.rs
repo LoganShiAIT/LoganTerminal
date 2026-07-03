@@ -365,7 +365,9 @@ fn parse_notification(payload: &[u8]) -> Option<(String, String)> {
     }
 }
 
-/// Set up a ZDOTDIR that emits OSC 7 from zsh's precmd hook.
+/// Set up a ZDOTDIR that emits OSC 7 (cwd) and OSC 133 (shell-integration
+/// prompt/command markers, consumed by the frontend's xterm OSC handler —
+/// see Terminal.tsx) from zsh's precmd/preexec hooks.
 /// Returns the ZDOTDIR path to inject into the environment.
 fn ensure_zsh_hook_dir() -> anyhow::Result<String> {
     let home = std::env::var("HOME")?;
@@ -381,19 +383,43 @@ if [[ -r "$HOME/.zshrc" ]]; then
   ZDOTDIR="$HOME" source "$HOME/.zshrc"
 fi
 
-_logan_terminal_osc7() {
-  local host="${HOST:-${HOSTNAME:-localhost}}"
-  printf '\e]7;file://%s%s\a' "$host" "$PWD"
+# Runs FIRST among precmd hooks so $? still reflects the command that just
+# finished, before any other precmd hook (theme, framework, ...) gets a
+# chance to run something that clobbers it.
+_logan_terminal_precmd_early() {
+  printf '\e]133;D;%d\a' "$?"
 }
 
-if [[ -n "${precmd_functions+set}" ]]; then
-  precmd_functions+=(_logan_terminal_osc7)
+# Runs LAST so it sees the final PROMPT after theme/framework precmd hooks
+# (oh-my-zsh, powerlevel10k, ...) have finished rebuilding it.
+_logan_terminal_precmd_late() {
+  local host="${HOST:-${HOSTNAME:-localhost}}"
+  printf '\e]7;file://%s%s\a' "$host" "$PWD"
+  printf '\e]133;A\a'
+  # Zero-width marker (%{...%}) so it isn't counted as visible width by
+  # zle; idempotent so frameworks that redraw PROMPT unchanged don't grow
+  # it every prompt.
+  if [[ "$PROMPT" != *$'\e]133;B'* ]]; then
+    PROMPT="${PROMPT}"'%{'$'\e]133;B\a''%}'
+  fi
+}
+
+_logan_terminal_preexec() {
+  printf '\e]133;C\a'
+}
+
+precmd_functions=(_logan_terminal_precmd_early "${precmd_functions[@]}")
+precmd_functions+=(_logan_terminal_precmd_late)
+
+if [[ -n "${preexec_functions+set}" ]]; then
+  preexec_functions+=(_logan_terminal_preexec)
 else
-  precmd_functions=(_logan_terminal_osc7)
+  preexec_functions=(_logan_terminal_preexec)
 fi
 
-# Emit once on startup so consumers get an initial cwd.
-_logan_terminal_osc7
+# Emit once on startup so consumers get an initial cwd and prompt marker.
+_logan_terminal_precmd_early
+_logan_terminal_precmd_late
 "#;
     std::fs::write(&zshrc, contents)?;
     Ok(dir.to_string_lossy().into_owned())

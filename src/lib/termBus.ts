@@ -2,7 +2,13 @@
  * Tiny window-event bridge so chrome UI (command palette, header) can drive
  * the active xterm instance, which lives inside the Terminal component.
  */
-export type TermCmd = "clear" | "find" | "scroll-bottom" | "focus";
+export type TermCmd =
+  | "clear"
+  | "find"
+  | "scroll-bottom"
+  | "focus"
+  | "prompt-prev"
+  | "prompt-next";
 
 export const TERM_CMD_EVENT = "logan:term-cmd";
 

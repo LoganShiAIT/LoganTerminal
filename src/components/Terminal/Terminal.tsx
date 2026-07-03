@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Terminal as XTerm } from "@xterm/xterm";
+import { Terminal as XTerm, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
@@ -92,6 +92,63 @@ export default function Terminal({
       },
     );
 
+    // Shell-integration prompt markers (OSC 133; zsh only — see pty.rs's
+    // zshrc hook). Registering directly on xterm's parser keeps markers in
+    // perfect sync with the byte offset they were emitted at; a Rust-side
+    // parse-then-event round trip could race the write it describes.
+    // A;  — new prompt about to render (jump target + failure-tick anchor)
+    // B;  — prompt finished rendering, input starts here (unused for now)
+    // C;  — command just started executing (clears the stale exit code)
+    // D;n — previous command finished with exit code n
+    let promptMarks: IMarker[] = [];
+    let pendingPromptMark: IMarker | null = null;
+    const jumpToPrompt = (dir: 1 | -1) => {
+      promptMarks = promptMarks.filter((m) => !m.isDisposed);
+      if (promptMarks.length === 0) return;
+      const viewportY = term.buffer.active.viewportY;
+      if (dir === -1) {
+        for (let i = promptMarks.length - 1; i >= 0; i--) {
+          if (promptMarks[i].line < viewportY) {
+            term.scrollToLine(promptMarks[i].line);
+            return;
+          }
+        }
+        term.scrollToLine(promptMarks[0].line);
+      } else {
+        for (const mark of promptMarks) {
+          if (mark.line > viewportY) {
+            term.scrollToLine(mark.line);
+            return;
+          }
+        }
+        term.scrollToBottom();
+      }
+    };
+    const oscHandler = term.parser.registerOscHandler(133, (data) => {
+      const [kind, arg] = data.split(";");
+      if (kind === "A") {
+        promptMarks = promptMarks.filter((m) => !m.isDisposed);
+        const mark = term.registerMarker(0);
+        if (mark) {
+          promptMarks.push(mark);
+          pendingPromptMark = mark;
+        }
+      } else if (kind === "C") {
+        usePtyStore.getState().setLastExitCode(paneId, null);
+      } else if (kind === "D") {
+        const code = arg !== undefined ? parseInt(arg, 10) : NaN;
+        if (!Number.isFinite(code)) return true;
+        usePtyStore.getState().setLastExitCode(paneId, code);
+        if (code !== 0 && pendingPromptMark && !pendingPromptMark.isDisposed) {
+          term.registerDecoration({
+            marker: pendingPromptMark,
+            overviewRulerOptions: { color: "#f87171", position: "left" },
+          });
+        }
+      }
+      return true;
+    });
+
     const updateAtBottom = () => {
       const buf = term.buffer.active;
       setAtBottom(buf.viewportY >= buf.baseY);
@@ -124,15 +181,15 @@ export default function Terminal({
           sessionId = id;
           unlistenData = await listen<string>(`pty://data/${id}`, (e) => {
             term.write(e.payload);
-            // Store no-ops when this is already the active tab.
-            usePtyStore.getState().markUnread(tabId);
+            // Store no-ops when this pane is the one being watched.
+            usePtyStore.getState().markUnread(tabId, paneId);
           });
           unlistenExit = await listen(`pty://exit/${id}`, () => {
             term.writeln("\r\n\x1b[31m[process exited]\x1b[0m");
             exited = true;
             const store = usePtyStore.getState();
             store.markPaneExited(paneId);
-            store.markUnread(tabId);
+            store.markUnread(tabId, paneId);
           });
           unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
             usePtyStore.getState().setCwd(paneId, e.payload);
@@ -217,6 +274,12 @@ export default function Terminal({
         case "focus":
           term.focus();
           break;
+        case "prompt-prev":
+          jumpToPrompt(-1);
+          break;
+        case "prompt-next":
+          jumpToPrompt(1);
+          break;
       }
     });
 
@@ -240,6 +303,13 @@ export default function Terminal({
       } else if ((e.key === "f" || e.key === "F") && !e.shiftKey) {
         e.preventDefault();
         setSearchOpen(true);
+      } else if (e.key === "ArrowUp") {
+        // Mod+arrows (not plain arrows, which stay with shell history).
+        e.preventDefault();
+        jumpToPrompt(-1);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        jumpToPrompt(1);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -264,6 +334,7 @@ export default function Terminal({
       searchResults.dispose();
       scrollDisposable.dispose();
       writeDisposable.dispose();
+      oscHandler.dispose();
       termRef.current = null;
       searchRef.current = null;
       term.dispose();

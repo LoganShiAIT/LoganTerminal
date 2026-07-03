@@ -125,6 +125,13 @@ function useActions(): PaletteAction[] {
         label: "Focus next pane",
         run: () => pty().cyclePane(1),
       },
+      {
+        id: "pane-zoom",
+        group: "Panes",
+        label: "Toggle pane zoom (maximize)",
+        hint: "⌘⇧Z",
+        run: () => pty().toggleZoom(),
+      },
     );
 
     actions.push(
@@ -148,6 +155,20 @@ function useActions(): PaletteAction[] {
         group: "Terminal",
         label: "Scroll to bottom",
         run: () => sendTermCmd("scroll-bottom"),
+      },
+      {
+        id: "term-prompt-prev",
+        group: "Terminal",
+        label: "Jump to previous prompt",
+        hint: "⌘↑",
+        run: () => sendTermCmd("prompt-prev"),
+      },
+      {
+        id: "term-prompt-next",
+        group: "Terminal",
+        label: "Jump to next prompt",
+        hint: "⌘↓",
+        run: () => sendTermCmd("prompt-next"),
       },
       {
         id: "font-up",
