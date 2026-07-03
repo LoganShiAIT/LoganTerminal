@@ -151,17 +151,26 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {leftSidebarOpen && (
-          <>
-            <aside
-              className="shrink-0 border-r border-edge overflow-hidden bg-panel/60 backdrop-blur-sm"
-              style={{ width: leftSidebarWidth }}
-            >
+        <aside
+          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
+          style={{
+            width: leftSidebarOpen ? leftSidebarWidth : 0,
+            borderRightWidth: leftSidebarOpen ? 1 : 0,
+            opacity: leftSidebarOpen ? 1 : 0,
+          }}
+          aria-hidden={!leftSidebarOpen}
+        >
+          <div
+            className="h-full transition-opacity duration-150 ease-out"
+            style={{
+              width: leftSidebarWidth,
+              opacity: leftSidebarOpen ? 1 : 0,
+            }}
+          >
               <FileTree />
-            </aside>
-            <ResizeHandle side="left" />
-          </>
-        )}
+          </div>
+        </aside>
+        <ResizeHandle side="left" active={leftSidebarOpen} />
 
         <main className="flex-1 min-w-0 relative bg-panel">
           {tabs.length === 0 ? (
@@ -184,17 +193,26 @@ export default function App() {
           )}
         </main>
 
-        {rightSidebarOpen && (
-          <>
-            <ResizeHandle side="right" />
-            <aside
-              className="shrink-0 border-l border-edge overflow-hidden bg-panel/60 backdrop-blur-sm"
-              style={{ width: rightSidebarWidth }}
-            >
+        <ResizeHandle side="right" active={rightSidebarOpen} />
+        <aside
+          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
+          style={{
+            width: rightSidebarOpen ? rightSidebarWidth : 0,
+            borderLeftWidth: rightSidebarOpen ? 1 : 0,
+            opacity: rightSidebarOpen ? 1 : 0,
+          }}
+          aria-hidden={!rightSidebarOpen}
+        >
+          <div
+            className="h-full transition-opacity duration-150 ease-out"
+            style={{
+              width: rightSidebarWidth,
+              opacity: rightSidebarOpen ? 1 : 0,
+            }}
+          >
               <RightPanel />
-            </aside>
-          </>
-        )}
+          </div>
+        </aside>
       </div>
 
       <DropOverlay />
@@ -203,11 +221,18 @@ export default function App() {
   );
 }
 
-function ResizeHandle({ side }: { side: "left" | "right" }) {
+function ResizeHandle({
+  side,
+  active,
+}: {
+  side: "left" | "right";
+  active: boolean;
+}) {
   const setLeftSidebarWidth = useUiStore((s) => s.setLeftSidebarWidth);
   const setRightSidebarWidth = useUiStore((s) => s.setRightSidebarWidth);
 
   const startDrag = (e: React.MouseEvent) => {
+    if (!active) return;
     e.preventDefault();
     const onMove = (move: MouseEvent) => {
       if (side === "left") setLeftSidebarWidth(move.clientX);
@@ -227,7 +252,9 @@ function ResizeHandle({ side }: { side: "left" | "right" }) {
 
   return (
     <div
-      className="group relative z-10 w-1 shrink-0 cursor-col-resize bg-transparent"
+      className={`group relative z-10 shrink-0 bg-transparent transition-[width,opacity] duration-200 ease-out ${
+        active ? "w-1 cursor-col-resize opacity-100" : "w-0 opacity-0"
+      }`}
       onMouseDown={startDrag}
       title="Resize sidebar"
     >
