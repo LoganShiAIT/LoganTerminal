@@ -7,6 +7,8 @@ export interface LeafPane {
   sessionId: string | null;
   cwd: string | null;
   agentName: string | null;
+  /** Shell/app-set window title (OSC 0/2); tab label prefers it over cwd. */
+  title: string | null;
   initialCwd: string | null;
   /** The shell process ended; the pane stays visible but accepts no input. */
   exited: boolean;
@@ -64,6 +66,7 @@ function makeLeaf(initialCwd: string | null = null): LeafPane {
     sessionId: null,
     cwd: null,
     agentName: null,
+    title: null,
     initialCwd,
     exited: false,
     lastExitCode: null,
@@ -201,6 +204,7 @@ interface PtyStore {
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
   setAgentName: (paneId: string, name: string | null) => void;
+  setPaneTitle: (paneId: string, title: string | null) => void;
   /** Both null = a command just started; both set = it finished. */
   setCommandResult: (
     paneId: string,
@@ -466,6 +470,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       updatePane(paneId, (l) =>
         l.agentName === agentName ? l : { ...l, agentName },
       ),
+
+    setPaneTitle: (paneId, title) =>
+      updatePane(paneId, (l) => (l.title === title ? l : { ...l, title })),
 
     setCommandResult: (paneId, lastExitCode, lastDurationMs) =>
       updatePane(paneId, (l) =>

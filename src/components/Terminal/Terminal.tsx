@@ -13,11 +13,14 @@ import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
 import { formatDuration } from "../../lib/duration";
 import { notify } from "../../lib/notify";
+import { openTerminalLink } from "../../lib/openLink";
 import { basename } from "../../lib/paths";
 import "@xterm/xterm/css/xterm.css";
 
 /** A finished command at least this long pings the OS when out of view. */
 const NOTIFY_AFTER_MS = 10_000;
+/** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
+const BELL_THROTTLE_MS = 30_000;
 
 interface TerminalProps {
   tabId: string;
@@ -70,10 +73,18 @@ export default function Terminal({
       smoothScrollDuration: 120,
       allowProposedApi: true,
       theme: buildXtermTheme(settings.themeId, settings.accentOverride),
+      // Explicit OSC 8 hyperlinks (agents emit these for file references).
+      // window.open is dead in a Tauri webview, so route through the
+      // opener plugin; non-http protocols are filtered inside the handler.
+      linkHandler: {
+        activate: (_e, text) => openTerminalLink(text),
+        allowNonHttpProtocols: true,
+      },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
+    // Same opener route for plain-text URLs the addon detects by regex.
+    term.loadAddon(new WebLinksAddon((_e, uri) => openTerminalLink(uri)));
     const search = new SearchAddon();
     term.loadAddon(search);
     // Correct emoji/CJK cell widths — AI CLIs print plenty of both.
@@ -206,6 +217,34 @@ export default function Terminal({
     };
     const scrollDisposable = term.onScroll(updateAtBottom);
     const writeDisposable = term.onWriteParsed(updateAtBottom);
+
+    // BEL: agent CLIs ring it when they need input. Marks the pane dot
+    // (store no-ops when this pane is being watched) and pings the OS when
+    // out of view — the toast names the detected agent when there is one.
+    let lastBellToast = 0;
+    const bellDisposable = term.onBell(() => {
+      const store = usePtyStore.getState();
+      store.markUnread(tabId, paneId);
+      if (!useSettingsStore.getState().notifyBell) return;
+      if (document.hasFocus() && store.activeTabId === tabId) return;
+      const now = Date.now();
+      if (now - lastBellToast < BELL_THROTTLE_MS) return;
+      lastBellToast = now;
+      const tab = store.tabs.find((t) => t.id === tabId);
+      const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
+      const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
+      notify(
+        leaf?.agentName
+          ? `${leaf.agentName} needs attention`
+          : "Terminal bell",
+        `in ${where}`,
+      );
+    });
+
+    // OSC 0/2 window title — surfaces on the tab instead of the cwd.
+    const titleDisposable = term.onTitleChange((title) => {
+      usePtyStore.getState().setPaneTitle(paneId, title.trim() || null);
+    });
 
     let unlistenData: UnlistenFn | null = null;
     let unlistenExit: UnlistenFn | null = null;
@@ -393,6 +432,8 @@ export default function Terminal({
       searchResults.dispose();
       scrollDisposable.dispose();
       writeDisposable.dispose();
+      bellDisposable.dispose();
+      titleDisposable.dispose();
       oscHandler.dispose();
       termRef.current = null;
       searchRef.current = null;

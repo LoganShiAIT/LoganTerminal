@@ -353,17 +353,27 @@ function EffectsSection() {
 
 function NotificationsSection() {
   const notifyLong = useSettingsStore((s) => s.notifyLongCommands);
-  const toggle = useSettingsStore((s) => s.toggleNotifyLongCommands);
+  const toggleLong = useSettingsStore((s) => s.toggleNotifyLongCommands);
+  const notifyBell = useSettingsStore((s) => s.notifyBell);
+  const toggleBell = useSettingsStore((s) => s.toggleNotifyBell);
 
   return (
     <div>
       <SectionLabel>Notifications</SectionLabel>
-      <ToggleRow
-        checked={notifyLong}
-        onToggle={toggle}
-        label="Notify when a long command finishes out of view"
-        title="Commands over 10s, when the window is unfocused or the tab is hidden. Needs shell integration (zsh, or bash ≥ 4.4)."
-      />
+      <div className="space-y-2.5">
+        <ToggleRow
+          checked={notifyLong}
+          onToggle={toggleLong}
+          label="Notify when a long command finishes out of view"
+          title="Commands over 10s, when the window is unfocused or the tab is hidden. Needs shell integration (zsh, or bash ≥ 4.4)."
+        />
+        <ToggleRow
+          checked={notifyBell}
+          onToggle={toggleBell}
+          label="Notify on terminal bell out of view"
+          title="Agent CLIs ring the bell when they need input. At most one toast per pane per 30s."
+        />
+      </div>
     </div>
   );
 }

@@ -179,6 +179,8 @@ export default function TabBar() {
         const leaves = collectLeaves(tab.root);
         const activeLeaf = activeLeafOf(tab);
         const labelCwd = activeLeaf.cwd ?? activeLeaf.initialCwd;
+        // Shell/app-set title (OSC 0/2) wins over the cwd-derived label.
+        const label = activeLeaf.title || tabLabel(labelCwd);
         const hasAgent = leaves.some((l) => l.agentName && !l.exited);
         const allExited = leaves.every((l) => l.exited);
         return (
@@ -239,7 +241,7 @@ export default function TabBar() {
             <span
               className={`truncate ${allExited ? "line-through opacity-50" : ""}`}
             >
-              {tabLabel(labelCwd)}
+              {label}
             </span>
             {leaves.length > 1 && (
               <span

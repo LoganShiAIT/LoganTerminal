@@ -44,6 +44,7 @@ function useActions(): PaletteAction[] {
   const ambientMotion = useSettingsStore((s) => s.ambientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
   const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
+  const notifyBell = useSettingsStore((s) => s.notifyBell);
   const rightPanelTab = useUiStore((s) => s.rightPanelTab);
 
   return useMemo(() => {
@@ -188,6 +189,13 @@ function useActions(): PaletteAction[] {
         label: "Toggle long-command notifications",
         active: notifyLongCommands,
         run: () => settings().toggleNotifyLongCommands(),
+      },
+      {
+        id: "term-notify-bell",
+        group: "Terminal",
+        label: "Toggle bell notifications",
+        active: notifyBell,
+        run: () => settings().toggleNotifyBell(),
       },
       {
         id: "font-up",
@@ -335,6 +343,7 @@ function useActions(): PaletteAction[] {
     ambientMotion,
     crtMode,
     notifyLongCommands,
+    notifyBell,
     rightPanelTab,
   ]);
 }
