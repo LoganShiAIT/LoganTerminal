@@ -4,6 +4,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { useSettingsStore, type CursorStyle } from "../../stores/settingsStore";
 import { THEMES } from "../../themes";
 import { fuzzyMatch } from "../../lib/fuzzy";
+import { recentActionIds, recordAction, recencyBoost } from "../../lib/recency";
 import { sendTermCmd } from "../../lib/termBus";
 import { basename } from "../../lib/paths";
 
@@ -19,6 +20,8 @@ interface PaletteAction {
   active?: boolean;
   /** Skip refocusing the terminal after running (action manages focus). */
   keepFocus?: boolean;
+  /** Excluded from recent-command tracking (id embeds an ephemeral uuid). */
+  transient?: boolean;
   run: () => void;
 }
 
@@ -58,6 +61,7 @@ function useActions(): PaletteAction[] {
         label: `Go to tab ${i + 1} — ${cwd ? basename(cwd) || "/" : "shell"}`,
         hint: i < 9 ? `⌘${i + 1}` : undefined,
         active: tab.id === activeTabId,
+        transient: true,
         run: () => pty().setActiveTab(tab.id),
       });
     });
@@ -169,6 +173,13 @@ function useActions(): PaletteAction[] {
         label: "Jump to next prompt",
         hint: "⌘↓",
         run: () => sendTermCmd("prompt-next"),
+      },
+      {
+        id: "term-select-output",
+        group: "Terminal",
+        label: "Select last command output",
+        hint: "⌘⇧A",
+        run: () => sendTermCmd("select-output"),
       },
       {
         id: "font-up",
@@ -346,18 +357,42 @@ export default function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, setOpen]);
 
+  // Re-read once per open (not per keystroke): running an action closes the
+  // palette, so the list can only change between opens.
+  const recentIds = useMemo(() => (open ? recentActionIds() : []), [open]);
+
   const results = useMemo(() => {
     if (!query.trim()) {
-      return actions.map((action) => ({ action, indices: [] as number[] }));
+      const byId = new Map(actions.map((a) => [a.id, a]));
+      const recent = recentIds
+        .map((id) => byId.get(id))
+        .filter((a): a is PaletteAction => a !== undefined)
+        .slice(0, 5)
+        .map((action) => ({ action, indices: [] as number[], recent: true }));
+      return [
+        ...recent,
+        ...actions.map((action) => ({
+          action,
+          indices: [] as number[],
+          recent: false,
+        })),
+      ];
     }
     return actions
       .map((action) => {
         const m = fuzzyMatch(query, action.label);
-        return m ? { action, indices: m.indices, score: m.score } : null;
+        return m
+          ? {
+              action,
+              indices: m.indices,
+              recent: false,
+              score: m.score + recencyBoost(action.id, recentIds),
+            }
+          : null;
       })
       .filter((r): r is NonNullable<typeof r> => r !== null)
       .sort((a, b) => b.score - a.score);
-  }, [actions, query]);
+  }, [actions, query, recentIds]);
 
   useEffect(() => {
     setSelected(0);
@@ -371,6 +406,7 @@ export default function CommandPalette() {
 
   const run = (action: PaletteAction) => {
     setOpen(false);
+    if (!action.transient) recordAction(action.id);
     action.run();
     if (!action.keepFocus) sendTermCmd("focus");
   };
@@ -426,14 +462,18 @@ export default function CommandPalette() {
             </div>
           )}
           {results.map((r, i) => {
+            // Recent rows form their own pseudo-group; the same action can
+            // appear again below in its real group (hence the key prefix).
+            const groupOf = (x: typeof r) =>
+              x.recent ? "Recent" : x.action.group;
             const showHeader =
-              grouped && (i === 0 || results[i - 1].action.group !== r.action.group);
+              grouped && (i === 0 || groupOf(results[i - 1]) !== groupOf(r));
             const isSelected = i === selected;
             return (
-              <div key={r.action.id}>
+              <div key={(r.recent ? "recent:" : "") + r.action.id}>
                 {showHeader && (
                   <div className="px-4 pt-2.5 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-faint">
-                    {r.action.group}
+                    {groupOf(r)}
                   </div>
                 )}
                 <div

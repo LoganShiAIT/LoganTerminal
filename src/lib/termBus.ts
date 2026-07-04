@@ -8,7 +8,8 @@ export type TermCmd =
   | "scroll-bottom"
   | "focus"
   | "prompt-prev"
-  | "prompt-next";
+  | "prompt-next"
+  | "select-output";
 
 export const TERM_CMD_EVENT = "logan:term-cmd";
 

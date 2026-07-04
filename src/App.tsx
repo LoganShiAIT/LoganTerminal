@@ -441,7 +441,7 @@ function StatusCluster() {
         </span>
       )}
       {/* Only surface anomalies — a clean exit says nothing here. Requires
-          zsh shell integration (OSC 133); silently absent otherwise. */}
+          zsh/bash shell integration (OSC 133); silently absent otherwise. */}
       {!exited && pane?.lastExitCode != null && pane.lastExitCode !== 0 && (
         <span
           className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-red-300 bg-red-500/15 border border-red-400/40"

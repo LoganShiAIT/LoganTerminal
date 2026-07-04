@@ -92,16 +92,20 @@ export default function Terminal({
       },
     );
 
-    // Shell-integration prompt markers (OSC 133; zsh only — see pty.rs's
-    // zshrc hook). Registering directly on xterm's parser keeps markers in
+    // Shell-integration prompt markers (OSC 133; zsh + bash — see pty.rs's
+    // shell hooks). Registering directly on xterm's parser keeps markers in
     // perfect sync with the byte offset they were emitted at; a Rust-side
     // parse-then-event round trip could race the write it describes.
-    // A;  — new prompt about to render (jump target + failure-tick anchor)
+    // A;  — new prompt about to render (jump target + failure-tick anchor,
+    //       closes the previous command's output region)
     // B;  — prompt finished rendering, input starts here (unused for now)
-    // C;  — command just started executing (clears the stale exit code)
+    // C;  — command just started executing (clears the stale exit code,
+    //       opens the output region ⌘⇧A selects; needs bash >= 4.4 there)
     // D;n — previous command finished with exit code n
     let promptMarks: IMarker[] = [];
     let pendingPromptMark: IMarker | null = null;
+    let cmdStartMark: IMarker | null = null;
+    let lastOutput: { start: IMarker; end: IMarker } | null = null;
     const jumpToPrompt = (dir: 1 | -1) => {
       promptMarks = promptMarks.filter((m) => !m.isDisposed);
       if (promptMarks.length === 0) return;
@@ -124,6 +128,17 @@ export default function Terminal({
         term.scrollToBottom();
       }
     };
+    // Select the region between the last C (command start) and the A that
+    // followed it (next prompt) — i.e. the last command's output.
+    const selectLastOutput = () => {
+      if (!lastOutput) return;
+      const { start, end } = lastOutput;
+      if (start.isDisposed || end.isDisposed) return;
+      const to = end.line - 1; // stop above the next prompt's row
+      if (to < start.line) return; // command printed nothing
+      term.selectLines(start.line, to);
+      term.scrollToLine(start.line);
+    };
     const oscHandler = term.parser.registerOscHandler(133, (data) => {
       const [kind, arg] = data.split(";");
       if (kind === "A") {
@@ -132,9 +147,14 @@ export default function Terminal({
         if (mark) {
           promptMarks.push(mark);
           pendingPromptMark = mark;
+          if (cmdStartMark && !cmdStartMark.isDisposed) {
+            lastOutput = { start: cmdStartMark, end: mark };
+          }
+          cmdStartMark = null;
         }
       } else if (kind === "C") {
         usePtyStore.getState().setLastExitCode(paneId, null);
+        cmdStartMark = term.registerMarker(0) ?? null;
       } else if (kind === "D") {
         const code = arg !== undefined ? parseInt(arg, 10) : NaN;
         if (!Number.isFinite(code)) return true;
@@ -280,6 +300,9 @@ export default function Terminal({
         case "prompt-next":
           jumpToPrompt(1);
           break;
+        case "select-output":
+          selectLastOutput();
+          break;
       }
     });
 
@@ -310,6 +333,11 @@ export default function Terminal({
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         jumpToPrompt(1);
+      } else if ((e.key === "a" || e.key === "A") && e.shiftKey) {
+        // iTerm2's "Select Output of Last Command" convention; plain ⌘A is
+        // left alone so select-all behavior stays untouched.
+        e.preventDefault();
+        selectLastOutput();
       }
     };
     window.addEventListener("keydown", onKey);
