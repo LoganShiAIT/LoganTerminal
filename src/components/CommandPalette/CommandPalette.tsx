@@ -43,6 +43,7 @@ function useActions(): PaletteAction[] {
   const cursorBlink = useSettingsStore((s) => s.cursorBlink);
   const ambientMotion = useSettingsStore((s) => s.ambientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
+  const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
   const rightPanelTab = useUiStore((s) => s.rightPanelTab);
 
   return useMemo(() => {
@@ -180,6 +181,13 @@ function useActions(): PaletteAction[] {
         label: "Select last command output",
         hint: "⌘⇧A",
         run: () => sendTermCmd("select-output"),
+      },
+      {
+        id: "term-notify-long",
+        group: "Terminal",
+        label: "Toggle long-command notifications",
+        active: notifyLongCommands,
+        run: () => settings().toggleNotifyLongCommands(),
       },
       {
         id: "font-up",
@@ -326,6 +334,7 @@ function useActions(): PaletteAction[] {
     cursorBlink,
     ambientMotion,
     crtMode,
+    notifyLongCommands,
     rightPanelTab,
   ]);
 }

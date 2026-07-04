@@ -15,6 +15,7 @@ const CURSOR_STYLE_KEY = "logan.cursorStyle";
 const CURSOR_BLINK_KEY = "logan.cursorBlink";
 const AMBIENT_KEY = "logan.ambientMotion";
 const CRT_KEY = "logan.crt";
+const NOTIFY_LONG_KEY = "logan.notifyLongCmds";
 
 function loadFontSize(): number {
   const raw = localStorage.getItem(FONT_SIZE_KEY);
@@ -61,6 +62,8 @@ interface SettingsStore {
   ambientMotion: boolean;
   /** Retro scanline overlay on the terminal area. */
   crtMode: boolean;
+  /** Desktop toast when a long command finishes out of view (OSC 133). */
+  notifyLongCommands: boolean;
   /** Settings panel visibility — UI state, not persisted. */
   panelOpen: boolean;
   bumpFontSize: (delta: number) => void;
@@ -72,6 +75,7 @@ interface SettingsStore {
   toggleCursorBlink: () => void;
   toggleAmbientMotion: () => void;
   toggleCrtMode: () => void;
+  toggleNotifyLongCommands: () => void;
   setPanelOpen: (open: boolean) => void;
 }
 
@@ -84,6 +88,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   cursorBlink: loadBool(CURSOR_BLINK_KEY, true),
   ambientMotion: loadBool(AMBIENT_KEY, true),
   crtMode: loadBool(CRT_KEY, false),
+  notifyLongCommands: loadBool(NOTIFY_LONG_KEY, true),
   panelOpen: false,
   bumpFontSize: (delta) => {
     const next = Math.max(
@@ -133,6 +138,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = !get().crtMode;
     localStorage.setItem(CRT_KEY, next ? "1" : "0");
     set({ crtMode: next });
+  },
+  toggleNotifyLongCommands: () => {
+    const next = !get().notifyLongCommands;
+    localStorage.setItem(NOTIFY_LONG_KEY, next ? "1" : "0");
+    set({ notifyLongCommands: next });
   },
   setPanelOpen: (open) => set({ panelOpen: open }),
 }));

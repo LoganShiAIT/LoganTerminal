@@ -18,6 +18,7 @@ import {
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
 import { shellEscapePaths } from "./lib/shellEscape";
+import { formatDuration } from "./lib/duration";
 import { homeDir, tildify } from "./lib/paths";
 import { attachReviewPaths } from "./lib/reviewAttachments";
 import { sendTermCmd } from "./lib/termBus";
@@ -448,6 +449,15 @@ function StatusCluster() {
           title="Last command's exit status"
         >
           exit {pane.lastExitCode}
+        </span>
+      )}
+      {/* Same anomaly-only philosophy: quick commands say nothing. */}
+      {!exited && pane?.lastDurationMs != null && pane.lastDurationMs >= 2000 && (
+        <span
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge"
+          title="Last command's duration"
+        >
+          {formatDuration(pane.lastDurationMs)}
         </span>
       )}
       <span

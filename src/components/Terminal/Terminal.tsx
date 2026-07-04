@@ -7,11 +7,17 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { usePtyStore } from "../../stores/ptyStore";
+import { usePtyStore, findLeaf } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
+import { formatDuration } from "../../lib/duration";
+import { notify } from "../../lib/notify";
+import { basename } from "../../lib/paths";
 import "@xterm/xterm/css/xterm.css";
+
+/** A finished command at least this long pings the OS when out of view. */
+const NOTIFY_AFTER_MS = 10_000;
 
 interface TerminalProps {
   tabId: string;
@@ -100,11 +106,13 @@ export default function Terminal({
     //       closes the previous command's output region)
     // B;  — prompt finished rendering, input starts here (unused for now)
     // C;  — command just started executing (clears the stale exit code,
-    //       opens the output region ⌘⇧A selects; needs bash >= 4.4 there)
+    //       opens the output region ⌘⇧A selects, starts the duration
+    //       clock; needs bash >= 4.4 there)
     // D;n — previous command finished with exit code n
     let promptMarks: IMarker[] = [];
     let pendingPromptMark: IMarker | null = null;
     let cmdStartMark: IMarker | null = null;
+    let cmdStartedAt: number | null = null;
     let lastOutput: { start: IMarker; end: IMarker } | null = null;
     const jumpToPrompt = (dir: 1 | -1) => {
       promptMarks = promptMarks.filter((m) => !m.isDisposed);
@@ -153,17 +161,40 @@ export default function Terminal({
           cmdStartMark = null;
         }
       } else if (kind === "C") {
-        usePtyStore.getState().setLastExitCode(paneId, null);
+        usePtyStore.getState().setCommandResult(paneId, null, null);
         cmdStartMark = term.registerMarker(0) ?? null;
+        cmdStartedAt = Date.now();
       } else if (kind === "D") {
         const code = arg !== undefined ? parseInt(arg, 10) : NaN;
         if (!Number.isFinite(code)) return true;
-        usePtyStore.getState().setLastExitCode(paneId, code);
+        const durationMs =
+          cmdStartedAt !== null ? Date.now() - cmdStartedAt : null;
+        cmdStartedAt = null;
+        const store = usePtyStore.getState();
+        store.setCommandResult(paneId, code, durationMs);
         if (code !== 0 && pendingPromptMark && !pendingPromptMark.isDisposed) {
           term.registerDecoration({
             marker: pendingPromptMark,
             overviewRulerOptions: { color: "#f87171", position: "left" },
           });
+        }
+        // Long command finished while nobody was looking (app unfocused or
+        // tab hidden — a visible split pane in the active tab counts as
+        // looked-at) → OS toast. Panes without a C marker (bash 3.2) never
+        // get a duration, so they can't ping either.
+        if (
+          durationMs !== null &&
+          durationMs >= NOTIFY_AFTER_MS &&
+          useSettingsStore.getState().notifyLongCommands &&
+          (!document.hasFocus() || store.activeTabId !== tabId)
+        ) {
+          const tab = store.tabs.find((t) => t.id === tabId);
+          const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
+          const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
+          notify(
+            code === 0 ? "Command finished" : `Command failed (exit ${code})`,
+            `${formatDuration(durationMs)} in ${where}`,
+          );
         }
       }
       return true;

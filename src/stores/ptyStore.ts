@@ -12,10 +12,16 @@ export interface LeafPane {
   exited: boolean;
   /**
    * Exit code of the last completed command (OSC 133;D via shell
-   * integration, zsh only — see Terminal.tsx). Null while a command is
+   * integration, zsh/bash — see Terminal.tsx). Null while a command is
    * running or none has finished yet.
    */
   lastExitCode: number | null;
+  /**
+   * Wall-clock duration of the last completed command (OSC 133 C→D span).
+   * Null while running, when no command finished yet, or when the shell
+   * never emitted C (bash < 4.4 has no PS0).
+   */
+  lastDurationMs: number | null;
   /** Output arrived while this pane wasn't the focused one; see markUnread. */
   unread: boolean;
 }
@@ -61,6 +67,7 @@ function makeLeaf(initialCwd: string | null = null): LeafPane {
     initialCwd,
     exited: false,
     lastExitCode: null,
+    lastDurationMs: null,
     unread: false,
   };
 }
@@ -194,7 +201,12 @@ interface PtyStore {
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
   setAgentName: (paneId: string, name: string | null) => void;
-  setLastExitCode: (paneId: string, code: number | null) => void;
+  /** Both null = a command just started; both set = it finished. */
+  setCommandResult: (
+    paneId: string,
+    code: number | null,
+    durationMs: number | null,
+  ) => void;
   markUnread: (tabId: string, paneId: string) => void;
   markPaneExited: (paneId: string) => void;
   setDropPaths: (paths: string[] | null) => void;
@@ -455,9 +467,11 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         l.agentName === agentName ? l : { ...l, agentName },
       ),
 
-    setLastExitCode: (paneId, lastExitCode) =>
+    setCommandResult: (paneId, lastExitCode, lastDurationMs) =>
       updatePane(paneId, (l) =>
-        l.lastExitCode === lastExitCode ? l : { ...l, lastExitCode },
+        l.lastExitCode === lastExitCode && l.lastDurationMs === lastDurationMs
+          ? l
+          : { ...l, lastExitCode, lastDurationMs },
       ),
 
     markUnread: (tabId, paneId) =>

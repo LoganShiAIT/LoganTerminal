@@ -18,7 +18,7 @@ Phases 1–7 in: multi-tab + split panes, command palette, 8 themes, GPU renderi
 - Multi-tab terminal sessions: each tab is an independent PTY, new tabs inherit the current tab's cwd, hidden tabs stay alive (scrollback + shell process preserved). Shortcuts: ⌘T new tab, ⌘⇧W close tab/pane, ⌘⇧]/⌘⇧[ cycle, ⌘1-9 jump, drag to reorder.
 - Split panes, tmux-style: ⌘D split right, ⌘⇧D split down, ⌘⌥arrows to move focus geometrically, draggable dividers, ⌘⇧Z zoom (temporarily maximize a pane without killing its siblings). Per-pane unread dots show which background split produced output. The pane tree is part of the persisted tab snapshot.
 - Command palette (⌘P): fuzzy-searchable access to every tab/pane/terminal/appearance action, with your recently-run commands surfaced first and ranked higher while searching.
-- Shell integration (OSC 133, auto-injected for zsh and bash): ⌘↑/⌘↓ jump between prompts, ⌘⇧A selects the last command's output, failed commands get a red tick on the overview ruler and an "exit N" chip in the header. On bash ≥ 4.4 everything works; macOS's stock bash 3.2 lacks `PS0`, so there the exit chip clears one prompt late and ⌘⇧A is unavailable — the rest degrades gracefully.
+- Shell integration (OSC 133, auto-injected for zsh and bash): ⌘↑/⌘↓ jump between prompts, ⌘⇧A selects the last command's output, failed commands get a red tick on the overview ruler and an "exit N" chip in the header, commands ≥ 2s show their duration next to it. A command that takes ≥ 10s and finishes while the window is unfocused (or its tab hidden) fires a desktop notification — great for long agent runs; toggleable in settings. On bash ≥ 4.4 everything works; macOS's stock bash 3.2 lacks `PS0`, so there the exit chip clears one prompt late and duration/⌘⇧A are unavailable — the rest degrades gracefully.
 - Scrollback search (⌘F): find bar with match count, ↩/⇧↩ next/previous, warm-accent match highlighting, prefilled from the terminal selection. Plus a scroll-to-bottom pill whenever the viewport is scrolled up.
 - GPU rendering via the xterm WebGL addon (DOM-renderer fallback), Unicode 11 widths so emoji/CJK-heavy AI CLI output lines up, smooth scrolling.
 - Background-tab activity: a tab that produces output (or exits) while hidden gets an unread dot — glance at the tab strip to see which agent finished. Exited tabs show a struck-through label and an "exited" status instead of silently looking alive.
@@ -32,7 +32,7 @@ Phases 1–7 in: multi-tab + split panes, command palette, 8 themes, GPU renderi
   - Recent screenshots picked up from macOS's screenshot location (respecting `defaults com.apple.screencapture location`) or Windows' `Pictures/Screenshots`
 - Agent detection: polls each PTY session's process tree every 2s for known CLIs (`claude`, `codex`, `aider`, `amp`, `cline`, `cursor-agent`, `gemini`, `goose`, `opencode`, `kiro`) and shows a badge in the header when one is running. Normalizes Windows' `.exe`-suffixed process names so detection works on both platforms.
 - Desktop notifications from OSC 9 / 99 / 777 sequences (iTerm/wezterm-style, urxvt-style, Kitty-style) routed through the OS notification centre.
-- Settings panel (⌘, or the gear button): theme picker, accent color override (presets + custom picker), cursor style/blink, ambient motion, CRT mode, font size, hidden-files toggle. All persisted, all applied live.
+- Settings panel (⌘, or the gear button): theme picker, accent color override (presets + custom picker), cursor style/blink, ambient motion, CRT mode, long-command notifications, font size, hidden-files toggle. All persisted, all applied live.
 - Eight built-in themes (Warm Dark, Midnight, Moss, Latte-light, Synthwave, Matrix, Sakura, Ocean) defined once in `src/themes.ts` — the same source drives the Tailwind CSS variables and the xterm ANSI palette, so UI chrome and terminal colors can't drift apart. The accent override recolors everything: cursor, selection, borders, grid pattern, scrollbars, search highlights.
 - Default look: warm dark with a subtle Claude-orange grid pattern; xterm cursor and accents in Claude coral (`#d97757`).
 
@@ -47,7 +47,7 @@ Phases 1–7 in: multi-tab + split panes, command palette, 8 themes, GPU renderi
 | 5 | Command palette, WebGL rendering, tab drag-reorder, neon themes, ambient FX, asset lightbox — **done** |
 | 6 | Split panes: ⌘D/⌘⇧D splits, geometric focus, draggable dividers, pane snapshot restore — **done** |
 | 7 | Pane zoom, per-pane unread dots, OSC 133 shell integration (zsh + bash): prompt jumps, exit-code chip, select-last-output — **done** |
-| next | session reattach exploration (tmux-style daemon), bash integration on Windows (Git Bash), richer OSC 133 uses (command duration, re-run last command) |
+| next | session reattach exploration (tmux-style daemon), bash integration on Windows (Git Bash), select command text via the B/C markers |
 
 ## Develop
 

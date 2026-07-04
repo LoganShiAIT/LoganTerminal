@@ -64,6 +64,7 @@ export default function SettingsPanel() {
           <FontSizeSection />
           <CursorSection />
           <EffectsSection />
+          <NotificationsSection />
           <FilesSection />
         </div>
 
@@ -346,6 +347,23 @@ function EffectsSection() {
           label="CRT mode — retro scanlines over the terminal"
         />
       </div>
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const notifyLong = useSettingsStore((s) => s.notifyLongCommands);
+  const toggle = useSettingsStore((s) => s.toggleNotifyLongCommands);
+
+  return (
+    <div>
+      <SectionLabel>Notifications</SectionLabel>
+      <ToggleRow
+        checked={notifyLong}
+        onToggle={toggle}
+        label="Notify when a long command finishes out of view"
+        title="Commands over 10s, when the window is unfocused or the tab is hidden. Needs shell integration (zsh, or bash ≥ 4.4)."
+      />
     </div>
   );
 }
