@@ -1,6 +1,7 @@
 mod agents;
 mod clipboard;
 mod fs;
+mod git;
 mod pty;
 mod screenshots;
 
@@ -94,16 +95,20 @@ pub fn run() {
             pty_resize,
             pty_kill,
             shell_escape_paths,
+            git::git_branch,
+            git::git_worktree_add,
+            git::git_worktree_list,
+            git::git_worktree_remove,
             fs::fs_list_dir,
             fs::fs_stat_path,
             fs::fs_read_text_file,
             fs::fs_write_text_file,
             fs::fs_home_dir,
+            fs::paste_to_file,
             clipboard::clipboard_history,
             clipboard::clipboard_remove,
             screenshots::screenshot_history,
             screenshots::screenshot_remove,
-            agents::agent_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

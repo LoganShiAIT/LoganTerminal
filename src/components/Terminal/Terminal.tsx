@@ -7,7 +7,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { usePtyStore, findLeaf } from "../../stores/ptyStore";
+import { usePtyStore, findLeaf, collectLeaves } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
@@ -21,6 +21,8 @@ import "@xterm/xterm/css/xterm.css";
 const NOTIFY_AFTER_MS = 10_000;
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
+const BRACKETED_PASTE_START = "\x1b[200~";
+const BRACKETED_PASTE_END = "\x1b[201~";
 
 interface TerminalProps {
   tabId: string;
@@ -35,6 +37,19 @@ function searchDecorations() {
 }
 
 const isMac = navigator.userAgent.includes("Mac");
+
+function submitsPrompt(data: string): boolean {
+  // Prompt snippets and multi-line paste should not look like "sent" just
+  // because their pasted body contains line breaks. The user's Enter arrives
+  // as a separate \r after the paste lands.
+  if (
+    data.includes(BRACKETED_PASTE_START) &&
+    data.includes(BRACKETED_PASTE_END)
+  ) {
+    return false;
+  }
+  return data.includes("\r") || data.includes("\n");
+}
 
 export default function Terminal({
   tabId,
@@ -124,6 +139,7 @@ export default function Terminal({
     let pendingPromptMark: IMarker | null = null;
     let cmdStartMark: IMarker | null = null;
     let cmdStartedAt: number | null = null;
+    let lastDurationMs: number | null = null;
     let lastOutput: { start: IMarker; end: IMarker } | null = null;
     const jumpToPrompt = (dir: 1 | -1) => {
       promptMarks = promptMarks.filter((m) => !m.isDisposed);
@@ -178,8 +194,15 @@ export default function Terminal({
       } else if (kind === "D") {
         const code = arg !== undefined ? parseInt(arg, 10) : NaN;
         if (!Number.isFinite(code)) return true;
+        // A D with no preceding C (Enter on an empty prompt line) keeps the
+        // previous duration — otherwise the chip vanishes while the exit
+        // chip persists, which reads as two contradicting states. Only a
+        // freshly measured duration may trigger the long-command toast,
+        // else an empty Enter would re-announce the previous command.
+        const fresh = cmdStartedAt !== null;
         const durationMs =
-          cmdStartedAt !== null ? Date.now() - cmdStartedAt : null;
+          cmdStartedAt !== null ? Date.now() - cmdStartedAt : lastDurationMs;
+        lastDurationMs = durationMs;
         cmdStartedAt = null;
         const store = usePtyStore.getState();
         store.setCommandResult(paneId, code, durationMs);
@@ -189,11 +212,17 @@ export default function Terminal({
             overviewRulerOptions: { color: "#f87171", position: "left" },
           });
         }
+        // A long command finishing is the other strong attention signal
+        // (independent of the OS-toast preference — the chip is in-app).
+        if (fresh && durationMs !== null && durationMs >= NOTIFY_AFTER_MS) {
+          store.markAttention(tabId, paneId);
+        }
         // Long command finished while nobody was looking (app unfocused or
         // tab hidden — a visible split pane in the active tab counts as
         // looked-at) → OS toast. Panes without a C marker (bash 3.2) never
         // get a duration, so they can't ping either.
         if (
+          fresh &&
           durationMs !== null &&
           durationMs >= NOTIFY_AFTER_MS &&
           useSettingsStore.getState().notifyLongCommands &&
@@ -225,6 +254,9 @@ export default function Terminal({
     const bellDisposable = term.onBell(() => {
       const store = usePtyStore.getState();
       store.markUnread(tabId, paneId);
+      // Strong signal: agent TUIs ring when blocked on input. Store no-ops
+      // when the pane is being watched.
+      store.markAttention(tabId, paneId);
       if (!useSettingsStore.getState().notifyBell) return;
       if (document.hasFocus() && store.activeTabId === tabId) return;
       const now = Date.now();
@@ -283,6 +315,14 @@ export default function Terminal({
           });
           unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
             usePtyStore.getState().setCwd(paneId, e.payload);
+            // OSC 7 fires every prompt (not just on chdir), so this also
+            // catches `git checkout` in place — no polling needed. Reading
+            // .git/HEAD is two file reads; cheap enough per prompt.
+            invoke<string | null>("git_branch", { cwd: e.payload })
+              .then((branch) =>
+                usePtyStore.getState().setGitBranch(paneId, branch),
+              )
+              .catch(() => {});
           });
           unlistenAgent = await listen<string | null>(
             `pty://agent/${id}`,
@@ -298,12 +338,55 @@ export default function Terminal({
             cwd: initialCwd ?? undefined,
           });
           if (disposed) {
+            // Unmounted mid-spawn: the effect cleanup already ran (with
+            // these handles still null), so tear the listeners down here
+            // or they outlive the component.
             invoke("pty_kill", { sessionId: id });
+            unlistenData?.();
+            unlistenExit?.();
+            unlistenCwd?.();
+            unlistenAgent?.();
             return;
           }
           usePtyStore.getState().setSessionId(paneId, id);
+          {
+            // Fleet tabs: type the configured command once, right after
+            // spawn — the pty buffers it until the shell's first prompt
+            // (iTerm2 "send text at start" mechanism). Consumed immediately
+            // so an HMR re-effect or reload can never send it twice.
+            const store = usePtyStore.getState();
+            const tab = store.tabs.find((t) => t.id === tabId);
+            const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
+            if (leaf?.initialCmd) {
+              invoke("pty_write", {
+                sessionId: id,
+                data: leaf.initialCmd + "\r",
+              }).catch(() => {});
+              store.clearInitialCmd(paneId);
+            }
+          }
           term.onData((data) => {
-            if (sessionId && !exited) invoke("pty_write", { sessionId, data });
+            if (!sessionId || exited) return;
+            const sentAt = submitsPrompt(data) ? Date.now() : null;
+            const store = usePtyStore.getState();
+            const tab = store.tabs.find((t) => t.id === tabId);
+            const activeLeaf = tab ? findLeaf(tab.root, paneId) : undefined;
+            invoke("pty_write", { sessionId, data });
+            if (sentAt !== null && activeLeaf?.agentName && !activeLeaf.exited) {
+              store.markPromptSent(paneId, sentAt);
+            }
+            // Broadcast: fan the same bytes out to every live sibling pane
+            // (tmux synchronize-panes). Same caveat as tmux: any paste
+            // wrapping follows the *focused* pane's bracketed-paste mode.
+            if (!tab?.broadcast) return;
+            for (const leaf of collectLeaves(tab.root)) {
+              if (leaf.id !== paneId && leaf.sessionId && !leaf.exited) {
+                invoke("pty_write", { sessionId: leaf.sessionId, data });
+                if (sentAt !== null && leaf.agentName) {
+                  store.markPromptSent(leaf.id, sentAt);
+                }
+              }
+            }
           });
         } catch (err) {
           unlistenData?.();
@@ -351,6 +434,13 @@ export default function Terminal({
     // through the term bus rather than reaching into this component.
     const unsubTermCmd = onTermCmd((cmd) => {
       if (!activeRef.current) return;
+      if (typeof cmd === "object") {
+        // term.paste feeds onData like a real ⌘V: newlines normalized and,
+        // when the running program enabled bracketed paste, wrapped in the
+        // 200~/201~ guards so multi-line text doesn't run line-by-line.
+        if (cmd.kind === "paste") term.paste(cmd.text);
+        return;
+      }
       switch (cmd) {
         case "clear":
           term.clear();

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { usePtyStore, collectLeaves, activeLeafOf } from "../../stores/ptyStore";
 import { basename } from "../../lib/paths";
+import { kbd } from "../../lib/keys";
 
 function tabLabel(cwd: string | null): string {
   if (!cwd) return "shell";
@@ -280,7 +281,7 @@ export default function TabBar() {
       <button
         className="w-7 h-7 grid place-items-center rounded-lg text-base leading-none text-muted hover:text-accent hover:bg-accent/[0.08] hover:rotate-90 transition-[color,background-color,transform] duration-200 shrink-0"
         onClick={handleNewTab}
-        title="New terminal (⌘T)"
+        title={`New terminal (${kbd("⌘T")})`}
       >
         +
       </button>

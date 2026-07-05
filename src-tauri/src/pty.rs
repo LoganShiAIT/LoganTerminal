@@ -56,15 +56,21 @@ impl PtyManager {
 
         let shell_base = shell_base_name(&shell_path);
         let zdotdir = if shell_base == "zsh" {
+            // Login shell: a Dock-launched .app inherits a minimal PATH, and
+            // the fix-ups live in /etc/zprofile (path_helper) and the user's
+            // ~/.zprofile (Homebrew et al) — both read by login shells only.
+            // Every macOS terminal spawns login shells for the same reason.
+            cmd.arg("-l");
             ensure_zsh_hook_dir().ok()
         } else {
             None
         };
-        // bash gets the same OSC 7/133 integration via --rcfile (which
-        // replaces the rc files bash would read on its own, so the generated
-        // file chains them first). Unix-only: a bash.exe on Windows (Git
-        // Bash, WSL) may not resolve the Windows-style path we'd hand it,
-        // so it keeps stock behavior there.
+        // bash gets the same OSC 7/133 integration via --rcfile. A login
+        // (-l) bash would ignore --rcfile entirely, so BASH_RC instead
+        // emulates the full login + interactive startup sequence itself.
+        // Unix-only: a bash.exe on Windows (Git Bash, WSL) may not resolve
+        // the Windows-style path we'd hand it, so it keeps stock behavior
+        // there.
         #[cfg(unix)]
         if shell_base == "bash" {
             if let Ok(rc) = ensure_bash_hook_file() {
@@ -97,6 +103,10 @@ impl PtyManager {
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
             let mut osc = OscBuf::default();
+            // Bytes of a multi-byte UTF-8 character whose remainder is still
+            // in the pipe — decoding it lossily now would emit U+FFFD, so it
+            // carries over and prepends to the next chunk.
+            let mut pending: Vec<u8> = Vec::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
@@ -115,16 +125,27 @@ impl PtyManager {
                                     .show();
                             }
                         }
-                        let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                        if app_clone
-                            .emit(&format!("pty://data/{}", id_clone), data)
-                            .is_err()
+                        pending.extend_from_slice(&buf[..n]);
+                        let keep = utf8_incomplete_tail_start(&pending);
+                        let tail = pending.split_off(keep);
+                        let data = String::from_utf8_lossy(&pending).into_owned();
+                        pending = tail;
+                        if !data.is_empty()
+                            && app_clone
+                                .emit(&format!("pty://data/{}", id_clone), data)
+                                .is_err()
                         {
                             break;
                         }
                     }
                     Err(_) => break,
                 }
+            }
+            // A tail still held back at EOF is genuinely truncated — flush
+            // it so the last bytes aren't silently dropped.
+            if !pending.is_empty() {
+                let data = String::from_utf8_lossy(&pending).into_owned();
+                let _ = app_clone.emit(&format!("pty://data/{}", id_clone), data);
             }
             app_clone.state::<PtyManager>().remove(&id_clone);
             let _ = app_clone.emit(&format!("pty://exit/{}", id_clone), ());
@@ -176,9 +197,15 @@ impl PtyManager {
     }
 
     pub fn kill(&self, id: &str) -> anyhow::Result<()> {
-        let mut sessions = self.sessions.lock();
-        if let Some(mut session) = sessions.remove(id) {
+        // Take the session out under the lock but kill/reap outside it, so
+        // the (brief) blocking wait can't stall other PTY operations.
+        let session = self.sessions.lock().remove(id);
+        if let Some(mut session) = session {
             let _ = session.child.kill();
+            // Reap: portable-pty's unix Child is std::process::Child, and
+            // dropping one never waits — without this every closed tab
+            // would leave a zombie until the app quits.
+            let _ = session.child.wait();
         }
         Ok(())
     }
@@ -187,7 +214,48 @@ impl PtyManager {
     /// exit, so a shell the user quit (e.g. via `exit`) doesn't hold onto
     /// PTY handles indefinitely while the tab stays open.
     pub fn remove(&self, id: &str) {
-        self.sessions.lock().remove(id);
+        let session = self.sessions.lock().remove(id);
+        if let Some(mut session) = session {
+            // Already exited (the reader saw EOF), so this returns right
+            // away — it exists purely to reap the zombie.
+            let _ = session.child.wait();
+        }
+    }
+}
+
+/// Index at which an *incomplete* trailing UTF-8 sequence starts, or `len`
+/// when the buffer ends on a complete (or unsalvageably malformed)
+/// boundary. Only the final character can be cut off by a chunked read, so
+/// this looks back at most 3 bytes; anything it doesn't hold back goes
+/// through `from_utf8_lossy` exactly as before.
+fn utf8_incomplete_tail_start(bytes: &[u8]) -> usize {
+    let len = bytes.len();
+    let mut i = len;
+    // Step back over up to 3 continuation bytes (0b10xxxxxx).
+    while i > 0 && len - i < 3 && bytes[i - 1] & 0xC0 == 0x80 {
+        i -= 1;
+    }
+    if i == 0 {
+        // Nothing but continuations — malformed, let lossy handle it.
+        return len;
+    }
+    let lead = bytes[i - 1];
+    let expected = if lead < 0x80 {
+        1
+    } else if lead & 0xE0 == 0xC0 {
+        2
+    } else if lead & 0xF0 == 0xE0 {
+        3
+    } else if lead & 0xF8 == 0xF0 {
+        4
+    } else {
+        // A stray continuation/invalid lead — malformed, not incomplete.
+        return len;
+    };
+    if len - (i - 1) < expected {
+        i - 1
+    } else {
+        len
     }
 }
 
@@ -397,11 +465,35 @@ fn ensure_zsh_hook_dir() -> anyhow::Result<String> {
     let dir = std::path::PathBuf::from(&home)
         .join(".logan-terminal")
         .join("shell");
-    std::fs::create_dir_all(&dir)?;
-
-    let zshrc = dir.join(".zshrc");
-    std::fs::write(&zshrc, ZSH_RC)?;
+    write_zsh_hook_files(&dir)?;
     Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Writes the hook `.zshrc` plus chain stubs for every other zsh startup
+/// file. Setting ZDOTDIR redirects zsh away from $HOME for *all* of them,
+/// so without the stubs a login shell would skip the user's ~/.zprofile —
+/// exactly the file that holds PATH setup (Homebrew) on a typical macOS
+/// machine.
+fn write_zsh_hook_files(dir: &std::path::Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    for name in [".zshenv", ".zprofile", ".zlogin"] {
+        std::fs::write(dir.join(name), zsh_chain_stub(name))?;
+    }
+    std::fs::write(dir.join(".zshrc"), ZSH_RC)?;
+    Ok(())
+}
+
+/// A ZDOTDIR stub that just runs the user's real counterpart, with ZDOTDIR
+/// pointing at $HOME for its duration (zsh scopes that assignment to the
+/// `source` builtin) so anything it sources relative to ZDOTDIR resolves.
+fn zsh_chain_stub(name: &str) -> String {
+    format!(
+        r#"# Auto-generated by LoganTerminal — do not edit.
+if [[ -r "$HOME/{name}" ]]; then
+  ZDOTDIR="$HOME" source "$HOME/{name}"
+fi
+"#
+    )
 }
 
 const ZSH_RC: &str = r#"# Auto-generated by LoganTerminal — do not edit.
@@ -417,11 +509,30 @@ _logan_terminal_precmd_early() {
   printf '\e]133;D;%d\a' "$?"
 }
 
+# Percent-encode $PWD byte-wise for the file:// URL — a directory literally
+# named like "foo%20bar" must not decode into something else. nomultibyte
+# makes subscripts/lengths byte-based so UTF-8 names encode per byte.
+_logan_terminal_emit_osc7() {
+  setopt localoptions nomultibyte
+  local host="${HOST:-${HOSTNAME:-localhost}}" str="$PWD" out="" i ch
+  for (( i = 1; i <= ${#str}; i++ )); do
+    ch="${str[$i]}"
+    if [[ "$ch" == [A-Za-z0-9/_.~-] ]]; then
+      out+="$ch"
+    else
+      # "'c" may sign-extend high bytes on some shells; mask to one byte.
+      printf -v ch '%d' "'$ch"
+      printf -v ch '%%%02X' "$(( ch & 0xFF ))"
+      out+="$ch"
+    fi
+  done
+  printf '\e]7;file://%s%s\a' "$host" "$out"
+}
+
 # Runs LAST so it sees the final PROMPT after theme/framework precmd hooks
 # (oh-my-zsh, powerlevel10k, ...) have finished rebuilding it.
 _logan_terminal_precmd_late() {
-  local host="${HOST:-${HOSTNAME:-localhost}}"
-  printf '\e]7;file://%s%s\a' "$host" "$PWD"
+  _logan_terminal_emit_osc7
   printf '\e]133;A\a'
   # Zero-width marker (%{...%}) so it isn't counted as visible width by
   # zle; idempotent so frameworks that redraw PROMPT unchanged don't grow
@@ -466,11 +577,30 @@ fn ensure_bash_hook_file() -> anyhow::Result<String> {
 
 #[cfg(unix)]
 const BASH_RC: &str = r#"# Auto-generated by LoganTerminal — do not edit.
-# bash reads this via --rcfile, which replaces the system/user rc files, so
-# chain what bash would have read on its own before adding our hooks.
+# bash reads this via --rcfile, which replaces every startup file bash would
+# read on its own — and a login (-l) bash would ignore --rcfile entirely. So
+# emulate the full login + interactive sequence here: a GUI-launched app
+# starts with a minimal PATH, and the fix-ups live in /etc/profile
+# (path_helper) and the user's profile file (Homebrew et al).
 [[ $- == *i* ]] || return
-[[ -r /etc/bash.bashrc ]] && source /etc/bash.bashrc
-[[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
+[[ -r /etc/profile ]] && source /etc/profile
+# First existing profile file wins — the same rule login bash applies. A
+# profile normally sources ~/.bashrc itself; only when none exists fall back
+# to the plain rc chain, so nothing runs twice.
+_logan_terminal_profile=
+for _logan_terminal_f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+  if [[ -r "$_logan_terminal_f" ]]; then
+    _logan_terminal_profile="$_logan_terminal_f"
+    break
+  fi
+done
+if [[ -n "$_logan_terminal_profile" ]]; then
+  source "$_logan_terminal_profile"
+else
+  [[ -r /etc/bash.bashrc ]] && source /etc/bash.bashrc
+  [[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
+fi
+unset _logan_terminal_profile _logan_terminal_f
 
 # Runs FIRST in PROMPT_COMMAND so $? still reflects the command that just
 # finished; `return`s that status so the user's own PROMPT_COMMAND (spliced
@@ -481,10 +611,30 @@ _logan_terminal_precmd_early() {
   return "$_LOGAN_TERMINAL_STATUS"
 }
 
+# Percent-encode $PWD byte-wise for the file:// URL — a directory literally
+# named like "foo%20bar" must not decode into something else. LC_ALL=C makes
+# ${str:i:1} byte-based so UTF-8 names encode per byte (works on bash 3.2).
+_logan_terminal_emit_osc7() {
+  local LC_ALL=C str="$PWD" out="" i ch
+  for (( i = 0; i < ${#str}; i++ )); do
+    ch="${str:i:1}"
+    case "$ch" in
+      [A-Za-z0-9/_.~-]) out+="$ch" ;;
+      *)
+        # bash 3.2's "'c" sign-extends high bytes to negative values —
+        # mask to one byte before formatting.
+        printf -v ch '%d' "'$ch"
+        printf -v ch '%%%02X' "$(( ch & 0xFF ))"
+        out+="$ch" ;;
+    esac
+  done
+  printf '\e]7;file://%s%s\a' "${HOSTNAME:-localhost}" "$out"
+}
+
 # Runs LAST so it sees PS1 after the user's PROMPT_COMMAND (git prompts etc.)
 # has finished rebuilding it.
 _logan_terminal_precmd_late() {
-  printf '\e]7;file://%s%s\a' "${HOSTNAME:-localhost}" "$PWD"
+  _logan_terminal_emit_osc7
   printf '\e]133;A\a'
   # \[...\] so readline gives it zero width; idempotent so PROMPT_COMMANDs
   # that rebuild PS1 unchanged don't grow it every prompt.
@@ -740,6 +890,311 @@ mod tests {
         assert!(
             all.contains("\x1b]133;B\x07"),
             "PS1 input marker missing: {all:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn utf8_tail_detection() {
+        // Complete or empty — nothing held back.
+        assert_eq!(utf8_incomplete_tail_start(b"plain ascii"), 11);
+        assert_eq!(utf8_incomplete_tail_start("中文".as_bytes()), 6);
+        assert_eq!(utf8_incomplete_tail_start(b""), 0);
+        // Split multi-byte sequences — hold back the partial tail.
+        let zh = "中".as_bytes(); // e4 b8 ad
+        assert_eq!(utf8_incomplete_tail_start(&zh[..1]), 0);
+        assert_eq!(utf8_incomplete_tail_start(&zh[..2]), 0);
+        let mut buf = b"abc".to_vec();
+        buf.extend_from_slice(&zh[..2]);
+        assert_eq!(utf8_incomplete_tail_start(&buf), 3);
+        let crab = "🦀".as_bytes(); // f0 9f a6 80
+        for cut in 1..crab.len() {
+            let mut b = b"x".to_vec();
+            b.extend_from_slice(&crab[..cut]);
+            assert_eq!(utf8_incomplete_tail_start(&b), 1, "cut at {cut}");
+        }
+        // Malformed (stray continuations) — hand to lossy now, don't stall.
+        assert_eq!(utf8_incomplete_tail_start(&[0x80, 0x80, 0x80, 0x80]), 4);
+        assert_eq!(utf8_incomplete_tail_start(&[0x80, 0x80]), 2);
+    }
+
+    /// Mirrors the reader-loop carry algorithm: however a multi-byte char
+    /// gets cut across chunk reads, the decoded stream must come out
+    /// identical — no U+FFFD from chunking.
+    #[test]
+    fn utf8_carry_reassembles_split_chunks() {
+        let text = "ls 中文 🦀 done";
+        let bytes = text.as_bytes();
+        for cut in 0..=bytes.len() {
+            let mut pending: Vec<u8> = Vec::new();
+            let mut out = String::new();
+            for chunk in [&bytes[..cut], &bytes[cut..]] {
+                pending.extend_from_slice(chunk);
+                let keep = utf8_incomplete_tail_start(&pending);
+                let tail = pending.split_off(keep);
+                out.push_str(&String::from_utf8_lossy(&pending));
+                pending = tail;
+            }
+            // EOF flush of any held-back remainder.
+            out.push_str(&String::from_utf8_lossy(&pending));
+            assert_eq!(out, text, "cut at {cut}");
+        }
+    }
+
+    /// Real interactive zsh in a cwd that needs encoding (space, literal
+    /// '%', multibyte) — the emitted OSC 7 must be byte-wise
+    /// percent-encoded so the frontend decode can't mangle it.
+    #[test]
+    #[cfg(unix)]
+    fn zsh_rc_percent_encodes_osc7_pwd() {
+        use std::process::{Command, Stdio};
+
+        let base = std::env::temp_dir().join(format!("logan-zsh-enc-test-{}", std::process::id()));
+        let home = base.join("home");
+        let weird = home.join("we ird%40中");
+        std::fs::create_dir_all(&weird).unwrap();
+        let zdot = base.join("zdot");
+        write_zsh_hook_files(&zdot).unwrap();
+
+        let mut child = match Command::new("zsh")
+            .arg("-i")
+            .env("HOME", &home)
+            .env("ZDOTDIR", &zdot)
+            .current_dir(&weird)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => {
+                // No zsh on this machine — nothing to test.
+                let _ = std::fs::remove_dir_all(&base);
+                return;
+            }
+        };
+        child.stdin.as_mut().unwrap().write_all(b"exit\n").unwrap();
+        let out = child.wait_with_output().unwrap();
+        let all = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            all.contains("we%20ird%2540%E4%B8%AD"),
+            "encoded cwd missing from OSC 7: {all:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Same encoding check for the bash rc (LC_ALL=C byte-wise loop, which
+    /// must also hold on macOS's bash 3.2).
+    #[test]
+    #[cfg(unix)]
+    fn bash_rc_percent_encodes_osc7_pwd() {
+        use std::process::{Command, Stdio};
+
+        let dir = std::env::temp_dir().join(format!("logan-bash-enc-test-{}", std::process::id()));
+        let weird = dir.join("we ird%40中");
+        std::fs::create_dir_all(&weird).unwrap();
+        let rc = dir.join("bashrc");
+        std::fs::write(&rc, BASH_RC).unwrap();
+
+        let mut child = Command::new("bash")
+            .arg("--rcfile")
+            .arg(&rc)
+            .arg("-i")
+            .env("HOME", &dir)
+            .current_dir(&weird)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("bash should be available on unix");
+        child.stdin.as_mut().unwrap().write_all(b"exit\n").unwrap();
+        let out = child.wait_with_output().unwrap();
+        let all = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            all.contains("we%20ird%2540%E4%B8%AD"),
+            "encoded cwd missing from OSC 7: {all:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn zsh_hook_dir_chains_every_user_startup_file() {
+        let dir = std::env::temp_dir().join(format!("logan-zdot-test-{}", std::process::id()));
+        write_zsh_hook_files(&dir).unwrap();
+
+        for name in [".zshenv", ".zprofile", ".zlogin"] {
+            let content = std::fs::read_to_string(dir.join(name)).unwrap();
+            assert!(
+                content.contains(&format!("source \"$HOME/{name}\"")),
+                "{name} stub does not chain the user's file: {content:?}"
+            );
+        }
+        let zshrc = std::fs::read_to_string(dir.join(".zshrc")).unwrap();
+        assert_eq!(zshrc, ZSH_RC);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// End-to-end check of the login-shell PATH fix: a zsh started the way
+    /// the app starts it (-l, hook ZDOTDIR, minimal env) must pick up PATH
+    /// additions from ~/.zprofile via the chain stub — that's where
+    /// Homebrew lives on a typical macOS machine, and a Dock-launched .app
+    /// otherwise gets no PATH beyond the system defaults.
+    #[test]
+    #[cfg(unix)]
+    fn login_zsh_reads_user_zprofile_through_hook_dir() {
+        use std::process::Command;
+
+        let base = std::env::temp_dir().join(format!("logan-zlogin-test-{}", std::process::id()));
+        let home = base.join("home");
+        let zdot = base.join("zdot");
+        std::fs::create_dir_all(&home).unwrap();
+        write_zsh_hook_files(&zdot).unwrap();
+        std::fs::write(
+            home.join(".zprofile"),
+            "export PATH=\"$PATH:/logan-zprofile-sentinel\"\n",
+        )
+        .unwrap();
+
+        let out = match Command::new("zsh")
+            .args(["-l", "-c", "print -r -- $PATH"])
+            .env_clear()
+            .env("HOME", &home)
+            .env("PATH", "/usr/bin:/bin")
+            .env("ZDOTDIR", &zdot)
+            .output()
+        {
+            Ok(out) => out,
+            Err(_) => {
+                // No zsh on this machine (minimal CI image) — nothing to test.
+                let _ = std::fs::remove_dir_all(&base);
+                return;
+            }
+        };
+        let path = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            path.contains("/logan-zprofile-sentinel"),
+            "login zsh did not source the chained ~/.zprofile: {path:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The rc's login emulation must read the profile file (that's where
+    /// PATH setup lives) and must not double-source ~/.bashrc when the
+    /// profile already chains it — the standard macOS bash arrangement.
+    #[test]
+    #[cfg(unix)]
+    fn bash_rc_sources_profile_and_bashrc_exactly_once() {
+        use std::process::{Command, Stdio};
+
+        let dir =
+            std::env::temp_dir().join(format!("logan-bash-profile-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let rc = dir.join("bashrc");
+        std::fs::write(&rc, BASH_RC).unwrap();
+        std::fs::write(
+            dir.join(".bash_profile"),
+            "export PATH=\"$PATH:/logan-bash-profile-sentinel\"\n\
+             [ -r \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(".bashrc"),
+            "LOGAN_BASHRC_COUNT=$((${LOGAN_BASHRC_COUNT:-0}+1))\n",
+        )
+        .unwrap();
+
+        let mut child = Command::new("bash")
+            .arg("--rcfile")
+            .arg(&rc)
+            .arg("-i")
+            .env("HOME", &dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("bash should be available on unix");
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(b"echo \"PATH=$PATH RC_COUNT=$LOGAN_BASHRC_COUNT\"\nexit\n")
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        let all = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+
+        assert!(
+            all.contains("/logan-bash-profile-sentinel"),
+            "profile PATH addition missing: {all:?}"
+        );
+        assert!(
+            all.contains("RC_COUNT=1"),
+            "bashrc should run exactly once (via the profile): {all:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Without any profile file the rc falls back to sourcing ~/.bashrc
+    /// directly, preserving the pre-login-emulation behavior.
+    #[test]
+    #[cfg(unix)]
+    fn bash_rc_falls_back_to_bashrc_without_profile() {
+        use std::process::{Command, Stdio};
+
+        let dir =
+            std::env::temp_dir().join(format!("logan-bash-rconly-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let rc = dir.join("bashrc");
+        std::fs::write(&rc, BASH_RC).unwrap();
+        std::fs::write(
+            dir.join(".bashrc"),
+            "LOGAN_BASHRC_COUNT=$((${LOGAN_BASHRC_COUNT:-0}+1))\n",
+        )
+        .unwrap();
+
+        let mut child = Command::new("bash")
+            .arg("--rcfile")
+            .arg(&rc)
+            .arg("-i")
+            .env("HOME", &dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("bash should be available on unix");
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(b"echo \"RC_COUNT=$LOGAN_BASHRC_COUNT\"\nexit\n")
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        let all = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+
+        assert!(
+            all.contains("RC_COUNT=1"),
+            "fallback ~/.bashrc sourcing missing or doubled: {all:?}"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

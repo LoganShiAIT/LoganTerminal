@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import Terminal from "../Terminal/Terminal";
+import { kbd } from "../../lib/keys";
 import {
   usePtyStore,
   type LeafPane,
@@ -158,9 +159,11 @@ export default function PaneTree({
                 className={
                   showChrome
                     ? `relative h-full w-full overflow-hidden rounded-lg border transition-[border-color,opacity] duration-150 ${
-                        isActivePane
-                          ? "border-accent/45"
-                          : "border-edge opacity-[0.88] hover:opacity-100"
+                        tab.broadcast
+                          ? "border-accent/70"
+                          : isActivePane
+                            ? "border-accent/45"
+                            : "border-edge opacity-[0.88] hover:opacity-100"
                       }`
                     : "relative h-full w-full"
                 }
@@ -174,17 +177,23 @@ export default function PaneTree({
                   active={tabActive && isActivePane}
                   initialCwd={leaf.initialCwd}
                 />
-                {multi && !isActivePane && leaf.unread && (
+                {multi && !isActivePane && (leaf.unread || leaf.attention) && (
                   <span
-                    className="pointer-events-none absolute top-2 left-2 z-10 w-1.5 h-1.5 rounded-full bg-ink/80 animate-[dot-glow_1.8s_ease-in-out_infinite]"
-                    title="New output in this pane"
+                    className={`pointer-events-none absolute top-2 left-2 z-10 w-1.5 h-1.5 rounded-full animate-[dot-glow_1.8s_ease-in-out_infinite] ${
+                      leaf.attention ? "bg-accent" : "bg-ink/80"
+                    }`}
+                    title={
+                      leaf.attention
+                        ? "Needs attention (bell / long command done)"
+                        : "New output in this pane"
+                    }
                   />
                 )}
                 {isZoomed && (
                   <button
                     className="absolute top-2 right-2 z-10 flex items-center gap-1.5 h-6 px-2.5 rounded-full border border-accent/40 bg-raise/90 backdrop-blur-md text-[10px] text-accent shadow-[0_2px_12px_rgba(0,0,0,0.35)] hover:bg-accent hover:text-white transition-colors animate-[pop-in_0.12s_ease-out]"
                     onClick={() => usePtyStore.getState().toggleZoom()}
-                    title="Restore split view (⌘⇧Z)"
+                    title={`Restore split view (${kbd("⌘⇧Z")})`}
                   >
                     <ZoomRestoreIcon />
                     Zoomed

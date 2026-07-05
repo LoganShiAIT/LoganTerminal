@@ -48,7 +48,10 @@ export function parentOf(path: string): string {
   }
   const idx = trimmed.lastIndexOf(sep);
   if (sep === "\\") {
-    // "C:\foo" -> "C:\"; "C:\" stays "C:\".
+    // "C:\foo" -> "C:\"; "C:\" stays "C:\" (trimming leaves "C:" with no
+    // separator left, so idx would be -1 — rebuild the drive root instead
+    // of slicing to "").
+    if (idx === -1) return trimmed + "\\";
     if (idx <= 2) return trimmed.slice(0, trimmed.indexOf("\\") + 1);
     return trimmed.slice(0, idx);
   }

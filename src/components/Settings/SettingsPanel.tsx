@@ -6,7 +6,9 @@ import {
   DEFAULT_FONT_SIZE,
   type CursorStyle,
 } from "../../stores/settingsStore";
+import { usePromptStore } from "../../stores/promptStore";
 import { THEMES } from "../../themes";
+import { kbd } from "../../lib/keys";
 
 const ACCENT_PRESETS = [
   "#d97757", // claude coral
@@ -65,12 +67,14 @@ export default function SettingsPanel() {
           <CursorSection />
           <EffectsSection />
           <NotificationsSection />
+          <AgentsSection />
+          <PromptsSection />
           <FilesSection />
         </div>
 
         <div className="px-5 pb-4 text-[10px] text-faint">
           Changes apply instantly and are remembered across restarts. Tip:
-          everything here is also in the command palette (⌘P).
+          everything here is also in the command palette ({kbd("⌘P")}).
         </div>
       </div>
     </div>
@@ -81,6 +85,103 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
       {children}
+    </div>
+  );
+}
+
+function AgentsSection() {
+  const fleetCommand = useSettingsStore((s) => s.fleetCommand);
+  const setFleetCommand = useSettingsStore((s) => s.setFleetCommand);
+
+  return (
+    <div>
+      <SectionLabel>Agents</SectionLabel>
+      <div className="space-y-1.5">
+        <div className="text-[11px] text-muted">Fleet command</div>
+        <input
+          key={fleetCommand /* re-seed after external changes */}
+          defaultValue={fleetCommand}
+          placeholder="claude"
+          spellCheck={false}
+          className="w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[11px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50"
+          onBlur={(e) => setFleetCommand(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+        <div className="text-[10px] leading-relaxed text-faint">
+          Auto-run in every pane of a new fleet tab ({kbd("⌘P")} → "New fleet
+          tab"). Leave empty for plain shells.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptsSection() {
+  const prompts = usePromptStore((s) => s.prompts);
+  const addPrompt = usePromptStore((s) => s.addPrompt);
+  const removePrompt = usePromptStore((s) => s.removePrompt);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const add = () => {
+    const title = titleRef.current?.value ?? "";
+    const text = textRef.current?.value ?? "";
+    if (!title.trim() || !text.trim()) return;
+    addPrompt(title, text);
+    if (titleRef.current) titleRef.current.value = "";
+    if (textRef.current) textRef.current.value = "";
+    titleRef.current?.focus();
+  };
+
+  const field =
+    "w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[11px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50";
+
+  return (
+    <div>
+      <SectionLabel>Prompts</SectionLabel>
+      <div className="space-y-2">
+        {prompts.length === 0 && (
+          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[11px] leading-relaxed text-faint">
+            Save prompts you feed your agents often — insert them from the
+            command palette ({kbd("⌘P")}) into the focused terminal.
+          </div>
+        )}
+        {prompts.map((p) => (
+          <div
+            key={p.id}
+            className="group flex items-start gap-2 rounded-lg border border-edge bg-ink/[0.03] px-2.5 py-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-ink truncate">{p.title}</div>
+              <div className="font-mono text-[10px] text-faint whitespace-pre-wrap break-all line-clamp-2">
+                {p.text}
+              </div>
+            </div>
+            <button
+              className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[12px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
+              onClick={() => removePrompt(p.id)}
+              title="Delete prompt"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <input ref={titleRef} placeholder="Prompt title" className={field} />
+        <textarea
+          ref={textRef}
+          placeholder="Prompt text (multi-line ok — it inserts as one bracketed paste)"
+          rows={3}
+          className={`${field} resize-y`}
+        />
+        <button
+          className="h-7 px-3 rounded-md border border-edge text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+          onClick={add}
+        >
+          Add prompt
+        </button>
+      </div>
     </div>
   );
 }
@@ -216,7 +317,7 @@ function FontSizeSection() {
           className={btn}
           onClick={() => bump(-1)}
           disabled={fontSize <= MIN_FONT_SIZE}
-          title="Smaller (⌘−)"
+          title={`Smaller (${kbd("⌘−")})`}
         >
           −
         </button>
@@ -227,7 +328,7 @@ function FontSizeSection() {
           className={btn}
           onClick={() => bump(1)}
           disabled={fontSize >= MAX_FONT_SIZE}
-          title="Larger (⌘+)"
+          title={`Larger (${kbd("⌘+")})`}
         >
           +
         </button>
@@ -235,7 +336,7 @@ function FontSizeSection() {
           <button
             className="h-7 px-2.5 rounded-md text-[11px] text-muted hover:text-ink hover:bg-ink/5 transition-colors"
             onClick={reset}
-            title="Reset (⌘0)"
+            title={`Reset (${kbd("⌘0")})`}
           >
             reset
           </button>

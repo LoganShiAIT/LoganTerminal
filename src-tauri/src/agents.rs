@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use sysinfo::{Pid, ProcessesToUpdate, System};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::pty::PtyManager;
 
@@ -33,10 +33,6 @@ impl AgentState {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub fn snapshot(&self) -> HashMap<String, String> {
-        self.current.lock().clone()
-    }
 }
 
 pub fn spawn_monitor(app: AppHandle) {
@@ -57,9 +53,15 @@ pub fn spawn_monitor(app: AppHandle) {
             let agent_state = app.state::<AgentState>();
             let mut current = agent_state.current.lock();
 
-            for (session_id, shell_pid) in shell_pids {
-                let agent = find_agent_in_tree(&sys, &children_of, Pid::from_u32(shell_pid));
-                let prev = current.get(&session_id).cloned();
+            // Drop entries for sessions that no longer exist (tab closed,
+            // shell exited) so the map can't grow without bound across a
+            // long-lived app run.
+            let live: HashSet<&String> = shell_pids.iter().map(|(id, _)| id).collect();
+            current.retain(|id, _| live.contains(id));
+
+            for (session_id, shell_pid) in &shell_pids {
+                let agent = find_agent_in_tree(&sys, &children_of, Pid::from_u32(*shell_pid));
+                let prev = current.get(session_id).cloned();
                 if prev != agent {
                     let topic = format!("pty://agent/{}", session_id);
                     match &agent {
@@ -68,7 +70,7 @@ pub fn spawn_monitor(app: AppHandle) {
                             let _ = app.emit(&topic, Some(a.clone()));
                         }
                         None => {
-                            current.remove(&session_id);
+                            current.remove(session_id);
                             let _ = app.emit::<Option<String>>(&topic, None);
                         }
                     }
@@ -128,11 +130,6 @@ fn strip_exe_suffix(name: &str) -> &str {
     } else {
         name
     }
-}
-
-#[tauri::command]
-pub fn agent_snapshot(state: State<'_, AgentState>) -> HashMap<String, String> {
-    state.snapshot()
 }
 
 #[cfg(test)]

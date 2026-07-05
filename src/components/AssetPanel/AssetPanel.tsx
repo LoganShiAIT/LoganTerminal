@@ -13,6 +13,7 @@ import {
 } from "../../stores/screenshotStore";
 import { useActivePane } from "../../stores/ptyStore";
 import { shellEscapePath } from "../../lib/shellEscape";
+import { sendTermCmd } from "../../lib/termBus";
 import { basename } from "../../lib/paths";
 
 interface LightboxData {
@@ -87,10 +88,28 @@ export default function AssetPanel() {
     if (item.kind === "image" && item.image_path) {
       writePath(item.image_path);
     } else {
-      invoke("pty_write", {
-        sessionId: activeSessionId,
-        data: item.full_text ?? item.preview,
+      // Through xterm's paste path, not pty_write: a raw write would
+      // execute multi-line clipboard text line-by-line on click.
+      sendTermCmd({ kind: "paste", text: item.full_text ?? item.preview });
+    }
+  };
+
+  // Paste-as-file: agents handle a path far better than a wall-of-text
+  // paste. Backend writes ~/.logan-terminal/pastes/ (capped history) and
+  // the path is inserted shell-escaped like any other asset.
+  const insertAsFile = async (item: ClipboardItem) => {
+    if (!activeSessionId) return;
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    try {
+      const path = await invoke<string>("paste_to_file", {
+        contents: item.full_text ?? item.preview,
+        stamp,
       });
+      await writePath(path);
+    } catch (err) {
+      console.error("paste_to_file failed", err);
     }
   };
 
@@ -134,6 +153,9 @@ export default function AssetPanel() {
                           timestamp: item.timestamp,
                         })
                     : undefined
+                }
+                onFileInsert={
+                  item.kind === "text" ? () => insertAsFile(item) : undefined
                 }
                 kind={item.kind}
                 timestamp={item.timestamp}
@@ -333,6 +355,8 @@ interface AssetCardProps {
   onClick: () => void;
   onRemove: () => void;
   onZoom?: () => void;
+  /** Text cards only: write the content to a capped pastes dir, insert the path. */
+  onFileInsert?: () => void;
   kind: "image" | "text";
   timestamp: number;
   footer?: React.ReactNode;
@@ -344,6 +368,7 @@ function AssetCard({
   onClick,
   onRemove,
   onZoom,
+  onFileInsert,
   kind,
   timestamp,
   footer,
@@ -387,6 +412,30 @@ function AssetCard({
             strokeLinejoin="round"
           >
             <path d="M6.5 2.5h-4v4M9.5 13.5h4v-4M2.5 2.5 7 7M13.5 13.5 9 9" />
+          </svg>
+        </button>
+      )}
+      {onFileInsert && (
+        <button
+          className="absolute top-1.5 left-1.5 w-5 h-5 grid place-items-center rounded-md bg-black/60 backdrop-blur-sm text-ink/70 opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color] duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFileInsert();
+          }}
+          title="Insert as file path (writes a temp file, capped history)"
+        >
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z" />
+            <path d="M9.5 1.5V5H13" />
           </svg>
         </button>
       )}

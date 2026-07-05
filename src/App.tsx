@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
 import FileTree from "./components/FileTree/FileTree";
@@ -8,12 +8,15 @@ import TabBar from "./components/TabBar/TabBar";
 import PaneTree from "./components/PaneTree/PaneTree";
 import SettingsPanel from "./components/Settings/SettingsPanel";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
+import AgentDashboard from "./components/AgentDashboard/AgentDashboard";
+import WorktreeModal from "./components/WorktreeModal/WorktreeModal";
 import {
   usePtyStore,
   useActiveTab,
   useActivePane,
   getActiveLeaf,
   collectLeaves,
+  attentionPanes,
 } from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
@@ -22,8 +25,10 @@ import { formatDuration } from "./lib/duration";
 import { homeDir, tildify } from "./lib/paths";
 import { attachReviewPaths } from "./lib/reviewAttachments";
 import { sendTermCmd } from "./lib/termBus";
+import { kbd } from "./lib/keys";
 
 const isMac = navigator.userAgent.includes("Mac");
+const CLAUDE_CACHE_WINDOW_MS = 5 * 60 * 1000;
 
 /**
  * Move pane focus geometrically (⌘⌥arrows). Panes are located via their
@@ -85,6 +90,24 @@ export default function App() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
+  }, []);
+
+  // Page teardown (dev HMR hard reload, window close) skips React effect
+  // cleanup, which would orphan every backend PTY session until app quit —
+  // best-effort kill them synchronously-ish on the way out. In the shipped
+  // app window close also quits the process, so this is dev-mode hygiene.
+  useEffect(() => {
+    const killAll = () => {
+      for (const tab of usePtyStore.getState().tabs) {
+        for (const leaf of collectLeaves(tab.root)) {
+          if (leaf.sessionId && !leaf.exited) {
+            invoke("pty_kill", { sessionId: leaf.sessionId }).catch(() => {});
+          }
+        }
+      }
+    };
+    window.addEventListener("beforeunload", killAll);
+    return () => window.removeEventListener("beforeunload", killAll);
   }, []);
 
   useEffect(() => {
@@ -161,6 +184,11 @@ export default function App() {
                 ? "up"
                 : "down",
         );
+      } else if (e.altKey && e.code === "KeyI") {
+        // iTerm2's broadcast-input convention. Match the physical key: on
+        // mac, ⌥ composes dead keys into e.key ("ı"), never a plain "i".
+        e.preventDefault();
+        if (store.activeTabId) store.toggleBroadcast(store.activeTabId);
       } else if (e.shiftKey && e.key === "]") {
         e.preventDefault();
         store.cycleTab(1);
@@ -178,6 +206,14 @@ export default function App() {
         e.preventDefault();
         const ui = useUiStore.getState();
         ui.setPaletteOpen(!ui.paletteOpen);
+      } else if ((e.key === "o" || e.key === "O") && e.shiftKey) {
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        ui.setDashboardOpen(!ui.dashboardOpen);
+      } else if ((e.key === "n" || e.key === "N") && e.shiftKey) {
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        ui.setWorktreeModalOpen(!ui.worktreeModalOpen);
       } else if ((e.key === "b" || e.key === "B") && !e.shiftKey) {
         e.preventDefault();
         useUiStore.getState().toggleLeftSidebar();
@@ -226,7 +262,7 @@ export default function App() {
         <button
           className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-muted hover:text-accent hover:bg-accent/[0.08] transition-colors"
           onClick={() => useSettingsStore.getState().setPanelOpen(true)}
-          title="Settings (⌘,)"
+          title={`Settings (${kbd("⌘,")})`}
         >
           <GearIcon />
         </button>
@@ -298,6 +334,8 @@ export default function App() {
       <DropOverlay />
       <SettingsPanel />
       <CommandPalette />
+      <AgentDashboard />
+      <WorktreeModal />
     </div>
   );
 }
@@ -420,7 +458,9 @@ function GearIcon() {
 function StatusCluster() {
   const activeTab = useActiveTab();
   const pane = useActivePane();
+  const attnCount = usePtyStore((s) => attentionPanes(s.tabs).length);
   const [home, setHome] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     homeDir().then(setHome).catch(() => {});
@@ -429,9 +469,58 @@ function StatusCluster() {
   const exited = Boolean(pane?.exited);
   const live = Boolean(pane?.sessionId) && !exited;
   const cwd = pane?.cwd ?? null;
+  const promptSentAt = pane?.lastPromptSentAt ?? null;
+  const showPromptTimer = Boolean(pane && live);
+  const promptElapsedMs = promptSentAt ? Math.max(0, now - promptSentAt) : null;
+  const promptProgress =
+    promptElapsedMs === null
+      ? 0
+      : Math.min(100, (promptElapsedMs / CLAUDE_CACHE_WINDOW_MS) * 100);
+  const cacheWindowOpen =
+    promptElapsedMs !== null && promptElapsedMs < CLAUDE_CACHE_WINDOW_MS;
+
+  useEffect(() => {
+    if (!showPromptTimer || promptSentAt === null) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [showPromptTimer, promptSentAt]);
 
   return (
     <div className="ml-auto flex items-center gap-2.5 shrink-0">
+      {activeTab?.broadcast && (
+        <button
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-white bg-accent border border-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
+          onClick={() =>
+            usePtyStore.getState().toggleBroadcast(activeTab.id)
+          }
+          title="Broadcast is ON — keystrokes go to every pane in this tab. Click to turn off."
+        >
+          ⇶ broadcast
+        </button>
+      )}
+      {attnCount > 0 && (
+        <button
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-accent bg-accent/15 border border-accent/40 hover:bg-accent hover:text-white transition-colors"
+          onClick={() => {
+            usePtyStore.getState().jumpToAttention();
+            requestAnimationFrame(() => sendTermCmd("focus"));
+          }}
+          title={`Panes waiting on you (bell / long command done) — click to jump, ${kbd("⌘⇧O")} for the full overview`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+          {attnCount} waiting
+        </button>
+      )}
+      {pane?.gitBranch && !exited && (
+        <span
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge max-w-[160px]"
+          title={`Git branch of ${cwd ?? "cwd"} (from .git/HEAD)`}
+        >
+          <GitBranchIcon />
+          <span className="truncate">{pane.gitBranch}</span>
+        </span>
+      )}
       {pane?.agentName && !exited && (
         <span
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
@@ -440,6 +529,39 @@ function StatusCluster() {
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           {pane.agentName}
         </span>
+      )}
+      {showPromptTimer && pane && (
+        <button
+          className={`group relative isolate flex h-6 min-w-[86px] items-center gap-1.5 overflow-hidden rounded-full border px-2 font-mono text-[10px] transition-colors ${
+            promptSentAt
+              ? cacheWindowOpen
+                ? "border-accent/40 text-accent bg-accent/10 hover:bg-accent/15"
+                : "border-edge text-muted bg-ink/5 hover:text-accent hover:border-accent/35"
+              : "border-edge text-faint bg-ink/5 hover:text-accent hover:border-accent/35"
+          }`}
+          style={
+            promptSentAt
+              ? ({
+                  "--prompt-progress": `${promptProgress}%`,
+                } as CSSProperties)
+              : undefined
+          }
+          onClick={() => usePtyStore.getState().markPromptSent(pane.id)}
+          title={
+            promptSentAt
+              ? `${cacheWindowOpen ? "Claude cache window" : "Cache window passed"} · click to reset timer`
+              : "Start prompt timer"
+          }
+        >
+          {promptSentAt && (
+            <span
+              aria-hidden
+              className="absolute inset-y-0 left-0 -z-10 w-[var(--prompt-progress)] bg-accent/15 transition-[width] duration-300"
+            />
+          )}
+          <ClockIcon />
+          <span>{promptElapsedMs === null ? "timer" : formatDuration(promptElapsedMs)}</span>
+        </button>
       )}
       {/* Only surface anomalies — a clean exit says nothing here. Requires
           zsh/bash shell integration (OSC 133); silently absent otherwise. */}
@@ -479,7 +601,7 @@ function StatusCluster() {
         />
         <span className="truncate max-w-[240px]">
           {exited
-            ? "exited — ⌘⇧W to close"
+            ? `exited — ${kbd("⌘⇧W")} to close`
             : live
               ? cwd
                 ? tildify(cwd, home)
@@ -490,6 +612,47 @@ function StatusCluster() {
         </span>
       </span>
     </div>
+  );
+}
+
+function GitBranchIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden
+      className="shrink-0"
+    >
+      <circle cx="4.5" cy="3.5" r="1.8" />
+      <circle cx="4.5" cy="12.5" r="1.8" />
+      <circle cx="11.5" cy="5.5" r="1.8" />
+      <path d="M4.5 5.3v5.4M11.5 7.3c0 2.2-3 2.4-5 3" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="shrink-0"
+    >
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 4.8V8l2.2 1.4" />
+    </svg>
   );
 }
 
@@ -518,37 +681,37 @@ function WelcomeScreen() {
       </button>
       <div className="flex max-w-[80%] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-faint">
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘P</span> commands
+          <span className="kbd">{kbd("⌘P")}</span> commands
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘T</span> new tab
+          <span className="kbd">{kbd("⌘T")}</span> new tab
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘D</span> split
+          <span className="kbd">{kbd("⌘D")}</span> split
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘⇧Z</span> zoom pane
+          <span className="kbd">{kbd("⌘⇧Z")}</span> zoom pane
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘F</span> find
+          <span className="kbd">{kbd("⌘F")}</span> find
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘K</span> clear
+          <span className="kbd">{kbd("⌘K")}</span> clear
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘↑↓</span> jump prompts
+          <span className="kbd">{kbd("⌘↑↓")}</span> jump prompts
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘B</span> files
+          <span className="kbd">{kbd("⌘B")}</span> files
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘J</span> assets
+          <span className="kbd">{kbd("⌘J")}</span> assets
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘1-9</span> jump
+          <span className="kbd">{kbd("⌘1-9")}</span> jump
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">⌘,</span> settings
+          <span className="kbd">{kbd("⌘,")}</span> settings
         </span>
       </div>
     </div>

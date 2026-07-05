@@ -17,6 +17,8 @@ const AMBIENT_KEY = "logan.ambientMotion";
 const CRT_KEY = "logan.crt";
 const NOTIFY_LONG_KEY = "logan.notifyLongCmds";
 const NOTIFY_BELL_KEY = "logan.notifyBell";
+const FLEET_CMD_KEY = "logan.fleetCommand";
+const DEFAULT_FLEET_CMD = "claude";
 
 function loadFontSize(): number {
   const raw = localStorage.getItem(FONT_SIZE_KEY);
@@ -67,6 +69,11 @@ interface SettingsStore {
   notifyLongCommands: boolean;
   /** Desktop toast when a terminal bell rings out of view (agent prompts). */
   notifyBell: boolean;
+  /**
+   * Command auto-run in every pane of a fleet tab (⌘P → "New fleet tab").
+   * Empty string = spawn plain shells.
+   */
+  fleetCommand: string;
   /** Settings panel visibility — UI state, not persisted. */
   panelOpen: boolean;
   bumpFontSize: (delta: number) => void;
@@ -80,6 +87,7 @@ interface SettingsStore {
   toggleCrtMode: () => void;
   toggleNotifyLongCommands: () => void;
   toggleNotifyBell: () => void;
+  setFleetCommand: (cmd: string) => void;
   setPanelOpen: (open: boolean) => void;
 }
 
@@ -94,6 +102,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   crtMode: loadBool(CRT_KEY, false),
   notifyLongCommands: loadBool(NOTIFY_LONG_KEY, true),
   notifyBell: loadBool(NOTIFY_BELL_KEY, true),
+  fleetCommand: localStorage.getItem(FLEET_CMD_KEY) ?? DEFAULT_FLEET_CMD,
   panelOpen: false,
   bumpFontSize: (delta) => {
     const next = Math.max(
@@ -153,6 +162,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = !get().notifyBell;
     localStorage.setItem(NOTIFY_BELL_KEY, next ? "1" : "0");
     set({ notifyBell: next });
+  },
+  setFleetCommand: (cmd) => {
+    const trimmed = cmd.trim();
+    localStorage.setItem(FLEET_CMD_KEY, trimmed);
+    set({ fleetCommand: trimmed });
   },
   setPanelOpen: (open) => set({ panelOpen: open }),
 }));

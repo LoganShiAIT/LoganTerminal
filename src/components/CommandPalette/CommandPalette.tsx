@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePtyStore, activeLeafOf, getActiveLeaf } from "../../stores/ptyStore";
+import {
+  usePtyStore,
+  activeLeafOf,
+  getActiveLeaf,
+  attentionPanes,
+} from "../../stores/ptyStore";
+import { usePromptStore } from "../../stores/promptStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSettingsStore, type CursorStyle } from "../../stores/settingsStore";
 import { THEMES } from "../../themes";
 import { fuzzyMatch } from "../../lib/fuzzy";
 import { recentActionIds, recordAction, recencyBoost } from "../../lib/recency";
 import { sendTermCmd } from "../../lib/termBus";
+import { kbd } from "../../lib/keys";
 import { basename } from "../../lib/paths";
 
 interface PaletteAction {
@@ -45,7 +52,9 @@ function useActions(): PaletteAction[] {
   const crtMode = useSettingsStore((s) => s.crtMode);
   const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
   const notifyBell = useSettingsStore((s) => s.notifyBell);
+  const fleetCommand = useSettingsStore((s) => s.fleetCommand);
   const rightPanelTab = useUiStore((s) => s.rightPanelTab);
+  const prompts = usePromptStore((s) => s.prompts);
 
   return useMemo(() => {
     const pty = () => usePtyStore.getState();
@@ -54,6 +63,73 @@ function useActions(): PaletteAction[] {
 
     const actions: PaletteAction[] = [];
 
+    // Panes flagged for attention (bell / long command finished) come
+    // first — they're the "why did it ping me" flow.
+    const attn = attentionPanes(tabs);
+    if (attn.length > 0) {
+      actions.push({
+        id: "attn-next",
+        group: "Agents",
+        label: `Go to pane needing attention (${attn.length} waiting)`,
+        transient: true,
+        run: () => pty().jumpToAttention(),
+      });
+      for (const { tab, tabIndex, leaf } of attn) {
+        const cwd = leaf.cwd ?? leaf.initialCwd;
+        actions.push({
+          id: `attn-${leaf.id}`,
+          group: "Agents",
+          label: `${leaf.agentName ?? "shell"} needs attention — tab ${tabIndex + 1}${cwd ? ` · ${basename(cwd) || "/"}` : ""}`,
+          transient: true,
+          run: () => {
+            pty().setActiveTab(tab.id);
+            pty().setActivePane(tab.id, leaf.id);
+          },
+        });
+      }
+    }
+
+    actions.push({
+      id: "agent-overview",
+      group: "Agents",
+      label: "Agent overview — every pane, state, branch",
+      hint: kbd("⌘⇧O"),
+      keepFocus: true,
+      run: () => ui().setDashboardOpen(true),
+    });
+
+    actions.push({
+      id: "worktree-modal",
+      group: "Agents",
+      label: "Worktrees — new agent worktree / manage",
+      hint: kbd("⌘⇧N"),
+      keepFocus: true,
+      run: () => ui().setWorktreeModalOpen(true),
+    });
+
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    const activePane = activeTab ? activeLeafOf(activeTab) : null;
+    if (activePane && !activePane.exited) {
+      actions.push({
+        id: "agent-prompt-timer-reset",
+        group: "Agents",
+        label: "Start/reset prompt timer",
+        run: () => pty().markPromptSent(activePane.id),
+      });
+    }
+
+    // Fleet spawn — clave-style grid + claude-squad-style launch command.
+    const fleetCmd = fleetCommand.trim();
+    const fleetLabel = fleetCmd ? `running \`${fleetCmd}\`` : "plain shells";
+    for (const panes of [2, 4] as const) {
+      actions.push({
+        id: `fleet-new-${panes}`,
+        group: "Agents",
+        label: `New fleet tab — ${panes === 2 ? "2 panes" : "2×2 grid"}, ${fleetLabel}`,
+        run: () => pty().addFleetTab(panes, fleetCmd || null),
+      });
+    }
+
     tabs.forEach((tab, i) => {
       const leaf = activeLeafOf(tab);
       const cwd = leaf.cwd ?? leaf.initialCwd;
@@ -61,7 +137,7 @@ function useActions(): PaletteAction[] {
         id: `tab-${tab.id}`,
         group: "Tabs",
         label: `Go to tab ${i + 1} — ${cwd ? basename(cwd) || "/" : "shell"}`,
-        hint: i < 9 ? `⌘${i + 1}` : undefined,
+        hint: i < 9 ? kbd(`⌘${i + 1}`) : undefined,
         active: tab.id === activeTabId,
         transient: true,
         run: () => pty().setActiveTab(tab.id),
@@ -72,7 +148,7 @@ function useActions(): PaletteAction[] {
         id: "tab-new",
         group: "Tabs",
         label: "New tab",
-        hint: "⌘T",
+        hint: kbd("⌘T"),
         run: () => {
           const leaf = getActiveLeaf();
           pty().addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
@@ -91,14 +167,14 @@ function useActions(): PaletteAction[] {
         id: "tab-next",
         group: "Tabs",
         label: "Next tab",
-        hint: "⌘⇧]",
+        hint: kbd("⌘⇧]"),
         run: () => pty().cycleTab(1),
       },
       {
         id: "tab-prev",
         group: "Tabs",
         label: "Previous tab",
-        hint: "⌘⇧[",
+        hint: kbd("⌘⇧["),
         run: () => pty().cycleTab(-1),
       },
     );
@@ -108,21 +184,21 @@ function useActions(): PaletteAction[] {
         id: "pane-split-right",
         group: "Panes",
         label: "Split pane right",
-        hint: "⌘D",
+        hint: kbd("⌘D"),
         run: () => pty().splitPane("row"),
       },
       {
         id: "pane-split-down",
         group: "Panes",
         label: "Split pane down",
-        hint: "⌘⇧D",
+        hint: kbd("⌘⇧D"),
         run: () => pty().splitPane("col"),
       },
       {
         id: "pane-close",
         group: "Panes",
         label: "Close pane (last pane closes the tab)",
-        hint: "⌘⇧W",
+        hint: kbd("⌘⇧W"),
         run: () => pty().closeActivePane(),
       },
       {
@@ -135,8 +211,19 @@ function useActions(): PaletteAction[] {
         id: "pane-zoom",
         group: "Panes",
         label: "Toggle pane zoom (maximize)",
-        hint: "⌘⇧Z",
+        hint: kbd("⌘⇧Z"),
         run: () => pty().toggleZoom(),
+      },
+      {
+        id: "pane-broadcast",
+        group: "Panes",
+        label: "Toggle broadcast input (type into all panes)",
+        hint: kbd("⌘⌥I"),
+        active: tabs.find((t) => t.id === activeTabId)?.broadcast ?? false,
+        run: () => {
+          const s = pty();
+          if (s.activeTabId) s.toggleBroadcast(s.activeTabId);
+        },
       },
     );
 
@@ -145,14 +232,14 @@ function useActions(): PaletteAction[] {
         id: "term-clear",
         group: "Terminal",
         label: "Clear terminal",
-        hint: "⌘K",
+        hint: kbd("⌘K"),
         run: () => sendTermCmd("clear"),
       },
       {
         id: "term-find",
         group: "Terminal",
         label: "Find in scrollback",
-        hint: "⌘F",
+        hint: kbd("⌘F"),
         keepFocus: true,
         run: () => sendTermCmd("find"),
       },
@@ -166,21 +253,21 @@ function useActions(): PaletteAction[] {
         id: "term-prompt-prev",
         group: "Terminal",
         label: "Jump to previous prompt",
-        hint: "⌘↑",
+        hint: kbd("⌘↑"),
         run: () => sendTermCmd("prompt-prev"),
       },
       {
         id: "term-prompt-next",
         group: "Terminal",
         label: "Jump to next prompt",
-        hint: "⌘↓",
+        hint: kbd("⌘↓"),
         run: () => sendTermCmd("prompt-next"),
       },
       {
         id: "term-select-output",
         group: "Terminal",
         label: "Select last command output",
-        hint: "⌘⇧A",
+        hint: kbd("⌘⇧A"),
         run: () => sendTermCmd("select-output"),
       },
       {
@@ -201,21 +288,21 @@ function useActions(): PaletteAction[] {
         id: "font-up",
         group: "Terminal",
         label: "Increase font size",
-        hint: "⌘+",
+        hint: kbd("⌘+"),
         run: () => settings().bumpFontSize(1),
       },
       {
         id: "font-down",
         group: "Terminal",
         label: "Decrease font size",
-        hint: "⌘−",
+        hint: kbd("⌘−"),
         run: () => settings().bumpFontSize(-1),
       },
       {
         id: "font-reset",
         group: "Terminal",
         label: "Reset font size",
-        hint: "⌘0",
+        hint: kbd("⌘0"),
         run: () => settings().resetFontSize(),
       },
     );
@@ -225,14 +312,14 @@ function useActions(): PaletteAction[] {
         id: "view-left",
         group: "View",
         label: "Toggle files sidebar",
-        hint: "⌘B",
+        hint: kbd("⌘B"),
         run: () => ui().toggleLeftSidebar(),
       },
       {
         id: "view-right",
         group: "View",
         label: "Toggle assets / review sidebar",
-        hint: "⌘J",
+        hint: kbd("⌘J"),
         run: () => ui().toggleRightSidebar(),
       },
       {
@@ -261,11 +348,22 @@ function useActions(): PaletteAction[] {
         id: "view-settings",
         group: "View",
         label: "Open settings",
-        hint: "⌘,",
+        hint: kbd("⌘,"),
         keepFocus: true,
         run: () => settings().setPanelOpen(true),
       },
     );
+
+    // Saved prompt snippets (managed in Settings) — inserted through the
+    // paste channel so multi-line prompts land as one bracketed paste.
+    for (const p of prompts) {
+      actions.push({
+        id: `prompt-${p.id}`,
+        group: "Prompts",
+        label: `Insert prompt: ${p.title}`,
+        run: () => sendTermCmd({ kind: "paste", text: p.text }),
+      });
+    }
 
     for (const theme of THEMES) {
       actions.push({
@@ -344,7 +442,9 @@ function useActions(): PaletteAction[] {
     crtMode,
     notifyLongCommands,
     notifyBell,
+    fleetCommand,
     rightPanelTab,
+    prompts,
   ]);
 }
 

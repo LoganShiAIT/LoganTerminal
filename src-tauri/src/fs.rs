@@ -1,7 +1,10 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const MAX_TEXT_FILE_BYTES: u64 = 1024 * 1024;
+/// Paste-as-file history cap — same lesson as the clipboard PNG store: any
+/// file-backed history needs an eviction story or it grows forever.
+const MAX_PASTE_FILES: usize = 50;
 
 #[derive(Serialize)]
 pub struct FsEntry {
@@ -54,6 +57,72 @@ pub fn fs_read_text_file(path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn fs_write_text_file(path: String, contents: String) -> Result<(), String> {
     write_text_file(Path::new(&path), &contents).map_err(|e| e.to_string())
+}
+
+/// Writes clipboard text to `~/.logan-terminal/pastes/paste-<stamp>.txt`
+/// and returns the path, so huge multi-line text can be handed to an agent
+/// as a file path instead of a wall-of-text paste. The frontend supplies
+/// the (cosmetic, time-sortable) stamp; uniqueness comes from the collision
+/// suffix, and the dir is pruned to the newest MAX_PASTE_FILES.
+#[tauri::command]
+pub fn paste_to_file(contents: String, stamp: String) -> Result<String, String> {
+    let dir = pastes_dir().ok_or("no home directory")?;
+    let safe: String = stamp
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(32)
+        .collect();
+    let safe = if safe.is_empty() {
+        "paste".to_string()
+    } else {
+        safe
+    };
+    paste_into_dir(&dir, &contents, &safe, MAX_PASTE_FILES)
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
+fn pastes_dir() -> Option<PathBuf> {
+    let home = fs_home_dir();
+    if home.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(home).join(".logan-terminal").join("pastes"))
+}
+
+fn paste_into_dir(
+    dir: &Path,
+    contents: &str,
+    stamp: &str,
+    keep: usize,
+) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let mut path = dir.join(format!("paste-{stamp}.txt"));
+    let mut n = 1;
+    while path.exists() {
+        path = dir.join(format!("paste-{stamp}-{n}.txt"));
+        n += 1;
+    }
+    std::fs::write(&path, contents)?;
+    prune_paste_dir(dir, keep)?;
+    Ok(path)
+}
+
+/// Deletes the oldest files (by mtime) beyond `keep`.
+fn prune_paste_dir(dir: &Path, keep: usize) -> std::io::Result<()> {
+    let mut files: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .collect();
+    if files.len() <= keep {
+        return Ok(());
+    }
+    files.sort_by_key(|f| std::cmp::Reverse(f.0)); // newest first
+    for (_, path) in files.split_off(keep) {
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -224,6 +293,51 @@ mod tests {
 
         write_text_file(&file, "changed").unwrap();
         assert_eq!(fs::read_to_string(&file).unwrap(), "changed");
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn paste_into_dir_writes_creates_dir_and_suffixes_collisions() {
+        let dir = std::env::temp_dir().join(format!("logan-paste-test-{}", uuid::Uuid::new_v4()));
+        let pastes = dir.join("pastes"); // does not exist yet
+
+        let a = paste_into_dir(&pastes, "first", "20260704-190000", 50).unwrap();
+        let b = paste_into_dir(&pastes, "second", "20260704-190000", 50).unwrap();
+
+        assert_eq!(fs::read_to_string(&a).unwrap(), "first");
+        assert_eq!(fs::read_to_string(&b).unwrap(), "second");
+        assert_ne!(a, b, "same-stamp pastes must not overwrite");
+        assert!(b.to_string_lossy().contains("20260704-190000-1"));
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn paste_dir_prunes_oldest_beyond_cap() {
+        let dir = std::env::temp_dir().join(format!("logan-paste-prune-{}", uuid::Uuid::new_v4()));
+
+        // Sequential writes have strictly increasing mtimes (ns resolution
+        // on APFS/ext4); keep=3 must evict the two oldest.
+        for i in 0..5 {
+            paste_into_dir(&dir, &format!("v{i}"), &format!("stamp-{i}"), 3).unwrap();
+        }
+
+        let mut names: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                "paste-stamp-2.txt".to_string(),
+                "paste-stamp-3.txt".to_string(),
+                "paste-stamp-4.txt".to_string(),
+            ],
+            "oldest two should be pruned"
+        );
 
         fs::remove_dir_all(dir).unwrap();
     }

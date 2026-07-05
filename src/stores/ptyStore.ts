@@ -7,9 +7,22 @@ export interface LeafPane {
   sessionId: string | null;
   cwd: string | null;
   agentName: string | null;
+  /** Last time the user submitted input to a detected agent in this pane. */
+  lastPromptSentAt: number | null;
   /** Shell/app-set window title (OSC 0/2); tab label prefers it over cwd. */
   title: string | null;
   initialCwd: string | null;
+  /**
+   * Git branch of cwd (read from .git/HEAD on every OSC 7 prompt event);
+   * null = not a repository / unknown.
+   */
+  gitBranch: string | null;
+  /**
+   * One-shot command typed into the shell right after spawn (fleet tabs).
+   * Session-only by design: the tab snapshot never carries it, so restored
+   * tabs come back as plain shells and never auto-re-run anything.
+   */
+  initialCmd: string | null;
   /** The shell process ended; the pane stays visible but accepts no input. */
   exited: boolean;
   /**
@@ -26,6 +39,14 @@ export interface LeafPane {
   lastDurationMs: number | null;
   /** Output arrived while this pane wasn't the focused one; see markUnread. */
   unread: boolean;
+  /**
+   * A strong "needs a human" signal fired while the pane wasn't watched:
+   * BEL (agent TUIs ring when blocked on input) or a ≥10s command
+   * finishing. Deliberately NOT set by ordinary background output — that's
+   * what `unread` is for. Cleared alongside unread when the pane becomes
+   * watched.
+   */
+  attention: boolean;
 }
 
 export interface SplitPane {
@@ -49,6 +70,12 @@ export interface PtyTab {
   unread: boolean;
   /** Non-null while one pane is temporarily maximized (⌘⇧Z) over its siblings. */
   zoomedPaneId: string | null;
+  /**
+   * Keystrokes in the focused pane fan out to every live pane in this tab
+   * (tmux synchronize-panes). Deliberately not persisted in the tab
+   * snapshot: a forgotten fanout switch surviving a restart is a footgun.
+   */
+  broadcast: boolean;
 }
 
 export const MAX_PANES_PER_TAB = 8;
@@ -59,19 +86,26 @@ function clampRatio(r: number): number {
   return Math.max(RATIO_MIN, Math.min(RATIO_MAX, r));
 }
 
-function makeLeaf(initialCwd: string | null = null): LeafPane {
+function makeLeaf(
+  initialCwd: string | null = null,
+  initialCmd: string | null = null,
+): LeafPane {
   return {
     type: "leaf",
     id: crypto.randomUUID(),
     sessionId: null,
     cwd: null,
     agentName: null,
+    lastPromptSentAt: null,
     title: null,
     initialCwd,
+    gitBranch: null,
+    initialCmd,
     exited: false,
     lastExitCode: null,
     lastDurationMs: null,
     unread: false,
+    attention: false,
   };
 }
 
@@ -82,6 +116,7 @@ function makeTab(root: PaneNode): PtyTab {
     activePaneId: firstLeaf(root).id,
     unread: false,
     zoomedPaneId: null,
+    broadcast: false,
   };
 }
 
@@ -186,7 +221,14 @@ interface PtyStore {
   tabs: PtyTab[];
   activeTabId: string | null;
   dropPaths: string[] | null;
-  addTab: (initialCwd?: string | null) => string;
+  /** New tab; optional one-shot `initialCmd` typed into the shell on spawn. */
+  addTab: (initialCwd?: string | null, initialCmd?: string | null) => string;
+  /**
+   * New tab pre-split into a 2-pane row or 2×2 grid, every pane running
+   * `cmd` once after its shell spawns (null = plain shells). Inherits the
+   * active pane's directory, same as addTab-from-current semantics.
+   */
+  addFleetTab: (panes: 2 | 4, cmd: string | null) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   moveTab: (from: number, to: number) => void;
@@ -204,6 +246,11 @@ interface PtyStore {
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
   setAgentName: (paneId: string, name: string | null) => void;
+  setGitBranch: (paneId: string, branch: string | null) => void;
+  /** Consume a pane's one-shot startup command after sending it. */
+  clearInitialCmd: (paneId: string) => void;
+  /** Start/reset the prompt cadence timer for a pane. */
+  markPromptSent: (paneId: string, at?: number) => void;
   setPaneTitle: (paneId: string, title: string | null) => void;
   /** Both null = a command just started; both set = it finished. */
   setCommandResult: (
@@ -212,23 +259,42 @@ interface PtyStore {
     durationMs: number | null,
   ) => void;
   markUnread: (tabId: string, paneId: string) => void;
+  /** Strong needs-a-human signal (bell / long command done); see LeafPane.attention. */
+  markAttention: (tabId: string, paneId: string) => void;
+  /** Focus the first pane flagged for attention; returns false when none. */
+  jumpToAttention: () => boolean;
+  /** Toggle keystroke fanout to all panes of a tab (tmux synchronize-panes). */
+  toggleBroadcast: (tabId: string) => void;
   markPaneExited: (paneId: string) => void;
   setDropPaths: (paths: string[] | null) => void;
 }
 
 /**
- * On activating a tab, clear its tab-level dot AND its focused pane's dot
- * (that pane is now being watched) — but leave any other background pane's
- * dot alone until the user actually focuses it.
+ * On activating a tab, clear its tab-level dot AND its focused pane's dot +
+ * attention flag (that pane is now being watched) — but leave any other
+ * background pane's markers alone until the user actually focuses it.
  */
 function withUnreadCleared(tabs: PtyTab[], activeId: string | null): PtyTab[] {
   return tabs.map((t) => {
     if (t.id !== activeId) return t;
     const root = updateLeafIn(t.root, t.activePaneId, (l) =>
-      l.unread ? { ...l, unread: false } : l,
+      l.unread || l.attention ? { ...l, unread: false, attention: false } : l,
     );
     return !t.unread && root === t.root ? t : { ...t, unread: false, root };
   });
+}
+
+/** Every pane currently flagged for attention, in tab order. */
+export function attentionPanes(
+  tabs: PtyTab[],
+): Array<{ tab: PtyTab; tabIndex: number; leaf: LeafPane }> {
+  const out: Array<{ tab: PtyTab; tabIndex: number; leaf: LeafPane }> = [];
+  tabs.forEach((tab, tabIndex) => {
+    for (const leaf of collectLeaves(tab.root)) {
+      if (leaf.attention) out.push({ tab, tabIndex, leaf });
+    }
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,9 +387,47 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     activeTabId: initialTabs[0].id,
     dropPaths: null,
 
-    addTab: (initialCwd = null) => {
-      const tab = makeTab(makeLeaf(initialCwd));
+    addTab: (initialCwd = null, initialCmd = null) => {
+      const tab = makeTab(makeLeaf(initialCwd, initialCmd?.trim() || null));
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+      return tab.id;
+    },
+
+    addFleetTab: (panes, cmd) => {
+      const s = get();
+      const activeTab = s.tabs.find((t) => t.id === s.activeTabId);
+      const cwd = activeTab
+        ? (activeLeafOf(activeTab).cwd ?? activeLeafOf(activeTab).initialCwd)
+        : null;
+      const startCmd = cmd?.trim() || null;
+      const pair = (): SplitPane => ({
+        type: "split",
+        id: crypto.randomUUID(),
+        dir: "col",
+        ratio: 0.5,
+        a: makeLeaf(cwd, startCmd),
+        b: makeLeaf(cwd, startCmd),
+      });
+      const root: PaneNode =
+        panes === 2
+          ? {
+              type: "split",
+              id: crypto.randomUUID(),
+              dir: "row",
+              ratio: 0.5,
+              a: makeLeaf(cwd, startCmd),
+              b: makeLeaf(cwd, startCmd),
+            }
+          : {
+              type: "split",
+              id: crypto.randomUUID(),
+              dir: "row",
+              ratio: 0.5,
+              a: pair(),
+              b: pair(),
+            };
+      const tab = makeTab(root);
+      set((st) => ({ tabs: [...st.tabs, tab], activeTabId: tab.id }));
       return tab.id;
     },
 
@@ -424,7 +528,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         tabs: s.tabs.map((t) => {
           if (t.id !== tabId) return t;
           const root = updateLeafIn(t.root, paneId, (l) =>
-            l.unread ? { ...l, unread: false } : l,
+            l.unread || l.attention
+              ? { ...l, unread: false, attention: false }
+              : l,
           );
           if (t.activePaneId === paneId && root === t.root) return t;
           return { ...t, activePaneId: paneId, root };
@@ -471,6 +577,21 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         l.agentName === agentName ? l : { ...l, agentName },
       ),
 
+    setGitBranch: (paneId, gitBranch) =>
+      updatePane(paneId, (l) =>
+        l.gitBranch === gitBranch ? l : { ...l, gitBranch },
+      ),
+
+    clearInitialCmd: (paneId) =>
+      updatePane(paneId, (l) =>
+        l.initialCmd === null ? l : { ...l, initialCmd: null },
+      ),
+
+    markPromptSent: (paneId, at = Date.now()) =>
+      updatePane(paneId, (l) =>
+        l.lastPromptSentAt === at ? l : { ...l, lastPromptSentAt: at },
+      ),
+
     setPaneTitle: (paneId, title) =>
       updatePane(paneId, (l) => (l.title === title ? l : { ...l, title })),
 
@@ -504,6 +625,41 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         tabs[tabIdx] = { ...tab, root, unread: nextTabUnread };
         return { tabs };
       }),
+
+    markAttention: (tabId, paneId) =>
+      set((s) => {
+        const tabIdx = s.tabs.findIndex((t) => t.id === tabId);
+        if (tabIdx === -1) return s;
+        const tab = s.tabs[tabIdx];
+        // Watched right now → nothing to flag (same rule as markUnread).
+        if (tabId === s.activeTabId && paneId === tab.activePaneId) return s;
+        const root = updateLeafIn(tab.root, paneId, (l) =>
+          l.attention ? l : { ...l, attention: true },
+        );
+        if (root === tab.root) return s;
+        const tabs = [...s.tabs];
+        tabs[tabIdx] = { ...tab, root };
+        return { tabs };
+      }),
+
+    jumpToAttention: () => {
+      const s = get();
+      const hit = attentionPanes(s.tabs)[0];
+      if (!hit) return false;
+      // setActiveTab clears the *current* focused pane's markers; ordering
+      // matters — activate the tab first, then focus the flagged pane
+      // (which clears its own flag and makes the next call cycle onward).
+      get().setActiveTab(hit.tab.id);
+      get().setActivePane(hit.tab.id, hit.leaf.id);
+      return true;
+    },
+
+    toggleBroadcast: (tabId) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, broadcast: !t.broadcast } : t,
+        ),
+      })),
 
     markPaneExited: (paneId) =>
       updatePane(paneId, (l) => ({ ...l, exited: true })),

@@ -10,12 +10,18 @@ interface UiStore {
   rightPanelTab: RightPanelTab;
   /** Command palette visibility — UI state, not persisted. */
   paletteOpen: boolean;
+  /** Agent overview (⌘⇧O) visibility — UI state, not persisted. */
+  dashboardOpen: boolean;
+  /** Worktree modal (⌘⇧N) visibility — UI state, not persisted. */
+  worktreeModalOpen: boolean;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   setLeftSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   setRightPanelTab: (tab: RightPanelTab) => void;
   setPaletteOpen: (open: boolean) => void;
+  setDashboardOpen: (open: boolean) => void;
+  setWorktreeModalOpen: (open: boolean) => void;
 }
 
 const UI_KEY = "logan.uiLayout";
@@ -89,6 +95,8 @@ const initial = loadLayout() ?? {
 export const useUiStore = create<UiStore>((set) => ({
   ...initial,
   paletteOpen: false,
+  dashboardOpen: false,
+  worktreeModalOpen: false,
   toggleLeftSidebar: () =>
     set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
   toggleRightSidebar: () =>
@@ -103,6 +111,8 @@ export const useUiStore = create<UiStore>((set) => ({
     }),
   setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  setDashboardOpen: (dashboardOpen) => set({ dashboardOpen }),
+  setWorktreeModalOpen: (worktreeModalOpen) => set({ worktreeModalOpen }),
 }));
 
 useUiStore.subscribe(saveLayout);
