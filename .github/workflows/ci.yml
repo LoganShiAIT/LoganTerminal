@@ -11,7 +11,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # The app targets macOS + Windows (build.yml matches). If Linux ever
+        # becomes a target, re-add ubuntu-latest here plus an apt-get step for
+        # the Tauri system deps (libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+        # librsvg2-dev libxdo-dev) — without them the tauri crate cannot compile,
+        # which kept this workflow permanently red until 2026-07-05.
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -22,7 +27,7 @@ jobs:
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -30,6 +35,9 @@ jobs:
 
       - name: cargo fmt --check
         run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: cargo test
         run: cargo test
@@ -46,6 +54,9 @@ jobs:
 
       - name: npm ci
         run: npm ci
+
+      - name: npm test
+        run: npm test
 
       - name: npm run build
         run: npm run build
