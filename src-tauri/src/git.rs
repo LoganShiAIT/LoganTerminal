@@ -423,7 +423,11 @@ mod tests {
 
     #[test]
     fn worktree_add_list_remove_roundtrip() {
-        let container = make_temp().canonicalize().unwrap();
+        // tidy(): raw canonicalize() yields \\?\-verbatim paths on Windows,
+        // while the implementation strips that prefix — expected paths must
+        // go through the same normalization (first caught on the Windows CI
+        // runner, 2026-07-05).
+        let container = tidy(make_temp().canonicalize().unwrap());
         let repo = init_repo(&container);
 
         let created = worktree_add_impl(&repo, "Fix Login Flow").unwrap();
