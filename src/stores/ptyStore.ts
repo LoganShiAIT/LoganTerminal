@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { GitDirty } from "../lib/git";
 
 /** A terminal pane holding one PTY session. */
 export interface LeafPane {
@@ -17,6 +18,12 @@ export interface LeafPane {
    * null = not a repository / unknown.
    */
   gitBranch: string | null;
+  /**
+   * Working-tree dirty counts (`git status --porcelain`), refreshed with
+   * the branch on every OSC 7 prompt event. null = clean-or-unknown; the
+   * chip treats an all-zero value the same way.
+   */
+  gitDirty: GitDirty | null;
   /**
    * One-shot command typed into the shell right after spawn (fleet tabs).
    * Session-only by design: the tab snapshot never carries it, so restored
@@ -100,6 +107,7 @@ function makeLeaf(
     title: null,
     initialCwd,
     gitBranch: null,
+    gitDirty: null,
     initialCmd,
     exited: false,
     lastExitCode: null,
@@ -246,7 +254,12 @@ interface PtyStore {
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
   setAgentName: (paneId: string, name: string | null) => void;
-  setGitBranch: (paneId: string, branch: string | null) => void;
+  /** Branch + dirty counts land together (one OSC 7 refresh, one render). */
+  setGitInfo: (
+    paneId: string,
+    branch: string | null,
+    dirty: GitDirty | null,
+  ) => void;
   /** Consume a pane's one-shot startup command after sending it. */
   clearInitialCmd: (paneId: string) => void;
   /** Start/reset the prompt cadence timer for a pane. */
@@ -577,10 +590,19 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         l.agentName === agentName ? l : { ...l, agentName },
       ),
 
-    setGitBranch: (paneId, gitBranch) =>
-      updatePane(paneId, (l) =>
-        l.gitBranch === gitBranch ? l : { ...l, gitBranch },
-      ),
+    setGitInfo: (paneId, gitBranch, gitDirty) =>
+      updatePane(paneId, (l) => {
+        const sameDirty =
+          l.gitDirty === gitDirty ||
+          (l.gitDirty !== null &&
+            gitDirty !== null &&
+            l.gitDirty.added === gitDirty.added &&
+            l.gitDirty.modified === gitDirty.modified &&
+            l.gitDirty.deleted === gitDirty.deleted);
+        return l.gitBranch === gitBranch && sameDirty
+          ? l
+          : { ...l, gitBranch, gitDirty };
+      }),
 
     clearInitialCmd: (paneId) =>
       updatePane(paneId, (l) =>

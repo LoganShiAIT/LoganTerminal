@@ -4,7 +4,7 @@ Cross-platform terminal built for AI coding agents (Claude Code, Codex, Aider, e
 
 ## Status
 
-Phases 1–11 in: multi-tab + split panes, command palette, 8 themes, GPU rendering, OSC 133 shell integration (zsh + bash), and an agent-fleet workflow layer (broadcast input, prompt library, attention routing, prompt cadence timer, agent overview dashboard, git-branch awareness, one-action fleet spawn, worktree-per-agent flows). Daily-usable, still pre-1.0.
+Phases 1–12 in: multi-tab + split panes, command palette, 8 themes, GPU rendering, OSC 133 shell integration (zsh + bash), and an agent-fleet workflow layer (broadcast input, prompt library, attention routing, prompt cadence timer, agent overview dashboard, git-branch + dirty-state awareness, one-action fleet spawn, worktree-per-agent flows with a built-in diff review panel and one-click merge). Daily-usable, still pre-1.0.
 
 ## Stack
 
@@ -35,9 +35,10 @@ Phases 1–11 in: multi-tab + split panes, command palette, 8 themes, GPU render
 - Terminal-bell awareness: agent CLIs ring BEL when they need input — the pane gets an unread dot, and if the window is unfocused (or the tab hidden) an OS toast names the detected agent ("claude needs attention"). Throttled to one per pane per 30s, toggleable.
 - Attention routing: a bell or a ≥ 10s command finishing in an unwatched pane marks it "waiting" — the header shows a count chip (click to jump to the most recent), and the palette lists each waiting pane by agent and tab. Ordinary background output stays a plain unread dot; only strong "needs a human" signals escalate.
 - Agent overview (⌘⇧O): one overlay lists every pane across every tab — state (waiting on you / running / exited / idle), agent name, directory, git branch, unseen-output dot, and time since your last prompt. ↑↓ + ↵ or click to jump anywhere in the fleet.
-- Git-branch awareness: each pane shows its repo's current branch (read straight from `.git/HEAD` — linked worktrees included, no `git` subprocess). Refreshes at every prompt, so a `git checkout` shows up immediately; ideal for the one-agent-per-worktree workflow.
+- Git awareness per pane: the header chip shows the repo's current branch (read straight from `.git/HEAD` — linked worktrees included) plus live dirty counts (`+new ~modified −deleted`, from `git status --porcelain`). Both refresh at every prompt, so a `git checkout` or an agent editing files shows up immediately — glance at any pane and know whether its agent has touched the tree. The agent overview (⌘⇧O) carries the same counts per pane.
+- Diff review panel (⌘⇧G, or click the branch chip): review what an agent actually changed without leaving the terminal. Two views — "Changes" (uncommitted work vs HEAD, untracked files included) and "vs main" (commits the pane's branch carries beyond the main checkout — the worktree-review view). File list with +/− counts, expandable per-file colored patches, auto-refreshing on every prompt while visible.
 - Fleet spawn: one palette action opens a new tab pre-split into 2 panes or a 2×2 grid with your configured agent command (Settings → Agents, default `claude`) auto-run in every pane. The command is session-only — restored tabs after a restart come back as plain shells, never auto-re-running anything.
-- Worktree-per-agent (⌘⇧N): type a task name → a git worktree is created in `<repo>-worktrees/` next to the repo on a new branch, and a tab opens there with your agent already running — parallel agents without ever touching your main checkout (Chinese task names work; branch/path previewed live). The same modal lists existing worktrees to open or remove; removal is never forced, so git refusing a dirty tree is the safety rail and the branch always survives.
+- Worktree-per-agent (⌘⇧N): type a task name → a git worktree is created in `<repo>-worktrees/` next to the repo on a new branch, and a tab opens there with your agent already running — parallel agents without ever touching your main checkout (Chinese task names work; branch/path previewed live). The same modal lists existing worktrees to open, **merge**, or remove. Merge is the one-click finish: merge the task branch into the main checkout, remove the worktree, safe-delete the branch — it refuses if the worktree has uncommitted changes, and a conflicting merge is aborted automatically so the main checkout is never left with conflict markers. Removal is never forced, so git refusing a dirty tree is the safety rail and the branch always survives.
 - Broadcast input (⌘⌥I): keystrokes in the focused pane fan out to every live pane in the tab (tmux `synchronize-panes`) — drive several agents through the same prompt at once. Solid header chip + accent borders on every pane while on; deliberately never persisted across restarts.
 - Prompt library: save reusable prompt snippets in Settings → Prompts, run them from the palette — inserted through the bracketed-paste-safe channel, so multi-line prompts never auto-execute.
 - Prompt cadence timer: the status bar tracks time since your last prompt to the detected agent, with a progress fill over Claude's ~5-minute prompt-cache window — pace follow-ups to keep the cache warm. Auto-resets when you submit to an agent pane (broadcast included); click it (or use the palette) to start/reset manually.
@@ -62,7 +63,8 @@ Phases 1–11 in: multi-tab + split panes, command palette, 8 themes, GPU render
 | 9 | Agent fleet: broadcast input, paste-as-file, prompt library, attention routing, prompt cadence timer — **done** |
 | 10 | Fleet command: agent overview dashboard (⌘⇧O), git-branch awareness per pane, one-action fleet spawn — **done** |
 | 11 | Worktree-per-agent (⌘⇧N): create sibling worktree + branch + agent tab, list/open/remove — **done** |
-| next | session reattach exploration (tmux-style daemon), Windows shell integration (Git Bash / PowerShell), scrollback snapshot restore, worktree dirty-state / merge helpers, global summon hotkey |
+| 12 | Close the fleet loop: per-pane dirty-state chip, diff review panel (⌘⇧G, working + vs-main views), one-click worktree merge/finish — **done** |
+| next | session reattach exploration (tmux-style daemon), Windows shell integration (Git Bash / PowerShell), scrollback snapshot restore, global summon hotkey |
 
 ## Develop
 
@@ -75,8 +77,8 @@ Requires Rust (`rustup`) and Node 20+.
 
 Unit tests — both sides of the stack:
 
-- `cd src-tauri && cargo test` — 58 tests covering the OSC parser, notification format matcher, screenshot filename recognizer, default start directory, Windows agent-name normalization, clipboard image-file cleanup, paste-file write + pruning, UTF-8 chunk-boundary reassembly, git-branch resolution (`.git/HEAD` incl. worktree `gitdir:` files), worktree create/list/remove (driving real `git` against temp repos), directory listing, shell-name detection, and the generated shell-integration rc files — including tests that drive real interactive zsh/bash sessions to assert the login-profile chain and the exact OSC sequences emitted.
-- `npm test` — 104 vitest tests over the frontend logic: the pane-tree store (splits, close-focus handoff, zoom, unread/attention semantics, fleet tabs, snapshot round-trip incl. legacy format and depth caps), prompt library, agent-overview projection, worktree task sanitizer (fixture-matched with the Rust side), fuzzy matcher, palette recency, path/duration/keyboard-hint helpers, and the terminal command bus.
+- `cd src-tauri && cargo test` — 66 tests covering the OSC parser, notification format matcher, screenshot filename recognizer, default start directory, Windows agent-name normalization, clipboard image-file cleanup, paste-file write + pruning, UTF-8 chunk-boundary reassembly, git-branch resolution (`.git/HEAD` incl. worktree `gitdir:` files), status-porcelain dirty counting, diff numstat parsing, worktree create/list/remove and the merge/finish flow (driving real `git` against temp repos, incl. conflict auto-abort and unborn-HEAD fallbacks), directory listing, shell-name detection, and the generated shell-integration rc files — including tests that drive real interactive zsh/bash sessions to assert the login-profile chain and the exact OSC sequences emitted.
+- `npm test` — 106 vitest tests over the frontend logic: the pane-tree store (splits, close-focus handoff, zoom, unread/attention semantics, fleet tabs, git branch+dirty updates, snapshot round-trip incl. legacy format and depth caps), prompt library, agent-overview projection, worktree task sanitizer (fixture-matched with the Rust side), diff-line classifier, fuzzy matcher, palette recency, path/duration/keyboard-hint helpers, and the terminal command bus.
 
 ## Directory layout
 
@@ -87,8 +89,9 @@ src/                   # React app
     PaneTree/            # split-pane layout: flattens the pane tree to keyed cells
     TabBar/              # tab strip: switch/close/new/drag-reorder
     CommandPalette/      # ⌘P fuzzy action palette with recent-command ranking
-    AgentDashboard/      # ⌘⇧O fleet overview: every pane, state, branch, timer
-    WorktreeModal/       # ⌘⇧N worktree-per-agent: create / open / remove
+    AgentDashboard/      # ⌘⇧O fleet overview: every pane, state, branch, dirty, timer
+    WorktreeModal/       # ⌘⇧N worktree-per-agent: create / open / merge / remove
+    DiffPanel/           # ⌘⇧G git diff review: working-tree + vs-main views
     FileTree/            # left sidebar, follows active pane's cwd
     AssetPanel/          # right sidebar (clipboard + screenshots)
     DropOverlay/         # translucent drop feedback
@@ -98,7 +101,7 @@ src/                   # React app
   themes.ts              # theme definitions: CSS tokens + xterm palettes from one source
 src-tauri/src/         # Rust backend
   pty.rs                 # portable-pty + OSC 7 parser + notification parser + shell hook
-  git.rs                 # .git/HEAD branch lookup + worktree add/list/remove
+  git.rs                 # .git/HEAD branch + dirty counts + diff summary/patch + worktree add/list/merge/remove
   fs.rs                  # fs_list_dir / fs_home_dir
   clipboard.rs           # arboard-based clipboard monitor
   screenshots.rs         # notify-based screenshot watcher

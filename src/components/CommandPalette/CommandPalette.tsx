@@ -345,6 +345,18 @@ function useActions(): PaletteAction[] {
         },
       },
       {
+        id: "view-diff",
+        group: "View",
+        label: "Show git diff panel",
+        hint: kbd("⌘⇧G"),
+        active: rightPanelTab === "diff",
+        run: () => {
+          const s = ui();
+          s.setRightPanelTab("diff");
+          if (!s.rightSidebarOpen) s.toggleRightSidebar();
+        },
+      },
+      {
         id: "view-settings",
         group: "View",
         label: "Open settings",

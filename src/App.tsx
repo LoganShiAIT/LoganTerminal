@@ -26,6 +26,7 @@ import { homeDir, tildify } from "./lib/paths";
 import { attachReviewPaths } from "./lib/reviewAttachments";
 import { sendTermCmd } from "./lib/termBus";
 import { kbd } from "./lib/keys";
+import { dirtyTotal } from "./lib/git";
 
 const isMac = navigator.userAgent.includes("Mac");
 const CLAUDE_CACHE_WINDOW_MS = 5 * 60 * 1000;
@@ -214,6 +215,17 @@ export default function App() {
         e.preventDefault();
         const ui = useUiStore.getState();
         ui.setWorktreeModalOpen(!ui.worktreeModalOpen);
+      } else if ((e.key === "g" || e.key === "G") && e.shiftKey) {
+        // Diff panel: bring it up; if it's already the visible tab, hide
+        // the sidebar again (a true toggle for review-glance workflows).
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        if (ui.rightSidebarOpen && ui.rightPanelTab === "diff") {
+          ui.toggleRightSidebar();
+        } else {
+          ui.setRightPanelTab("diff");
+          if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
+        }
       } else if ((e.key === "b" || e.key === "B") && !e.shiftKey) {
         e.preventDefault();
         useUiStore.getState().toggleLeftSidebar();
@@ -513,13 +525,35 @@ function StatusCluster() {
         </button>
       )}
       {pane?.gitBranch && !exited && (
-        <span
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge max-w-[160px]"
-          title={`Git branch of ${cwd ?? "cwd"} (from .git/HEAD)`}
+        <button
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge max-w-[200px] hover:text-accent hover:border-accent/35 transition-colors"
+          onClick={() => {
+            const ui = useUiStore.getState();
+            ui.setRightPanelTab("diff");
+            if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
+          }}
+          title={`Git branch of ${cwd ?? "cwd"}${
+            dirtyTotal(pane.gitDirty) > 0
+              ? ` · uncommitted: ${pane.gitDirty!.added} new, ${pane.gitDirty!.modified} modified, ${pane.gitDirty!.deleted} deleted`
+              : " · clean"
+          } — click for the diff panel (${kbd("⌘⇧G")})`}
         >
           <GitBranchIcon />
           <span className="truncate">{pane.gitBranch}</span>
-        </span>
+          {dirtyTotal(pane.gitDirty) > 0 && (
+            <span className="flex items-center gap-1 shrink-0">
+              {pane.gitDirty!.added > 0 && (
+                <span className="text-emerald-300/90">+{pane.gitDirty!.added}</span>
+              )}
+              {pane.gitDirty!.modified > 0 && (
+                <span className="text-amber-300/90">~{pane.gitDirty!.modified}</span>
+              )}
+              {pane.gitDirty!.deleted > 0 && (
+                <span className="text-red-300/90">−{pane.gitDirty!.deleted}</span>
+              )}
+            </span>
+          )}
+        </button>
       )}
       {pane?.agentName && !exited && (
         <span

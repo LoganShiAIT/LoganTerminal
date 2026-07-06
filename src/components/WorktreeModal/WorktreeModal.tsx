@@ -47,6 +47,7 @@ export default function WorktreeModal() {
   const [runAgent, setRunAgent] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [entries, setEntries] = useState<WorktreeEntry[] | null>(null);
   const [repoError, setRepoError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +77,7 @@ export default function WorktreeModal() {
     if (!open) return;
     setTask("");
     setError(null);
+    setNotice(null);
     setBusy(false);
     setRunAgent(true);
     void refresh();
@@ -138,8 +140,31 @@ export default function WorktreeModal() {
     if (!cwd || busy) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await invoke("git_worktree_remove", { cwd, path });
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Finish a task: merge → remove worktree → safe-delete branch. */
+  const mergeEntry = async (entry: WorktreeEntry) => {
+    const cwd = mainPath ?? cwdOf();
+    if (!cwd || !entry.branch || busy) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const msg = await invoke<string>("git_worktree_merge", {
+        cwd,
+        path: entry.path,
+        branch: entry.branch,
+      });
+      setNotice(msg);
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -245,6 +270,12 @@ export default function WorktreeModal() {
             </div>
           )}
 
+          {notice && (
+            <div className="px-3 py-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 font-mono text-[10px] leading-relaxed text-emerald-300 whitespace-pre-wrap break-all">
+              {notice}
+            </div>
+          )}
+
           {entries && entries.length > 0 && (
             <div className="space-y-1 pt-1">
               {entries.map((e) => (
@@ -274,6 +305,15 @@ export default function WorktreeModal() {
                     >
                       Open
                     </button>
+                    {!e.is_main && e.branch && (
+                      <button
+                        className="h-6 px-2 rounded-md border border-edge text-[10px] text-muted hover:border-emerald-400/50 hover:text-emerald-300 transition-colors"
+                        onClick={() => void mergeEntry(e)}
+                        title="Finish: merge into the main checkout, remove the worktree, delete the branch. Refuses if dirty; a conflicting merge is aborted automatically."
+                      >
+                        Merge
+                      </button>
+                    )}
                     {!e.is_main && (
                       <button
                         className="h-6 px-2 rounded-md border border-edge text-[10px] text-muted hover:border-red-400/50 hover:text-red-300 transition-colors"

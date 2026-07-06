@@ -6,6 +6,7 @@ import { basename } from "../../lib/paths";
 import { formatDuration } from "../../lib/duration";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
+import { dirtyTotal } from "../../lib/git";
 
 function BranchIcon() {
   return (
@@ -197,6 +198,28 @@ export default function AgentDashboard() {
                     <span className="max-w-[120px] truncate">
                       {row.gitBranch}
                     </span>
+                    {dirtyTotal(row.gitDirty) > 0 && (
+                      <span
+                        className="flex items-center gap-1"
+                        title="Uncommitted changes: new / modified / deleted"
+                      >
+                        {row.gitDirty!.added > 0 && (
+                          <span className="text-emerald-300/90">
+                            +{row.gitDirty!.added}
+                          </span>
+                        )}
+                        {row.gitDirty!.modified > 0 && (
+                          <span className="text-amber-300/90">
+                            ~{row.gitDirty!.modified}
+                          </span>
+                        )}
+                        {row.gitDirty!.deleted > 0 && (
+                          <span className="text-red-300/90">
+                            −{row.gitDirty!.deleted}
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </span>
                 )}
                 <span className="ml-auto flex items-center gap-2 shrink-0">

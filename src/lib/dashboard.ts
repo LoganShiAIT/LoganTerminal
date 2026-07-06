@@ -1,4 +1,5 @@
 import { collectLeaves, type LeafPane, type PtyTab } from "../stores/ptyStore";
+import type { GitDirty } from "./git";
 
 /**
  * Display state of a pane in the agent overview, by precedence:
@@ -19,6 +20,8 @@ export interface DashboardRow {
   title: string | null;
   cwd: string | null;
   gitBranch: string | null;
+  /** Uncommitted-change counts — surfaces which agents touched files. */
+  gitDirty: GitDirty | null;
   unread: boolean;
   lastPromptSentAt: number | null;
   /** This pane is its tab's focused pane. */
@@ -52,6 +55,7 @@ export function dashboardRows(
         title: leaf.title,
         cwd: leaf.cwd ?? leaf.initialCwd,
         gitBranch: leaf.gitBranch,
+        gitDirty: leaf.gitDirty,
         unread: leaf.unread,
         lastPromptSentAt: leaf.lastPromptSentAt,
         focused,

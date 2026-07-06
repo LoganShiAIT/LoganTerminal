@@ -15,6 +15,7 @@ import { formatDuration } from "../../lib/duration";
 import { notify } from "../../lib/notify";
 import { openTerminalLink } from "../../lib/openLink";
 import { basename } from "../../lib/paths";
+import type { GitStatusInfo } from "../../lib/git";
 import "@xterm/xterm/css/xterm.css";
 
 /** A finished command at least this long pings the OS when out of view. */
@@ -286,6 +287,7 @@ export default function Terminal({
     let disposed = false;
     let spawning = false;
     let exited = false;
+    let gitStatusInFlight = false;
 
     const onSize = async () => {
       if (disposed) return;
@@ -316,13 +318,22 @@ export default function Terminal({
           unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
             usePtyStore.getState().setCwd(paneId, e.payload);
             // OSC 7 fires every prompt (not just on chdir), so this also
-            // catches `git checkout` in place — no polling needed. Reading
-            // .git/HEAD is two file reads; cheap enough per prompt.
-            invoke<string | null>("git_branch", { cwd: e.payload })
-              .then((branch) =>
-                usePtyStore.getState().setGitBranch(paneId, branch),
+            // catches `git checkout` in place — no polling needed. Branch +
+            // dirty counts come back in one round trip; `git status` on a
+            // huge cold repo can be slow, so never stack a second query on
+            // an unfinished one (the next prompt refreshes anyway).
+            if (gitStatusInFlight) return;
+            gitStatusInFlight = true;
+            invoke<GitStatusInfo | null>("git_status", { cwd: e.payload })
+              .then((info) =>
+                usePtyStore
+                  .getState()
+                  .setGitInfo(paneId, info?.branch ?? null, info?.dirty ?? null),
               )
-              .catch(() => {});
+              .catch(() => {})
+              .finally(() => {
+                gitStatusInFlight = false;
+              });
           });
           unlistenAgent = await listen<string | null>(
             `pty://agent/${id}`,

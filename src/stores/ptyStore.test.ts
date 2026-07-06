@@ -465,20 +465,33 @@ describe("fleet tabs", () => {
   });
 });
 
-describe("git branch", () => {
-  it("setGitBranch stamps only the target pane and preserves identity on no-ops", async () => {
+describe("git info", () => {
+  it("setGitInfo stamps only the target pane and preserves identity on no-ops", async () => {
     const m = await fresh();
     const st = () => m.usePtyStore.getState();
     st().splitPane("row");
     const [l0] = m.collectLeaves(st().tabs[0].root);
 
-    st().setGitBranch(l0.id, "main");
+    st().setGitInfo(l0.id, "main", { added: 1, modified: 2, deleted: 0 });
     const [n0, n1] = m.collectLeaves(st().tabs[0].root);
     expect(n0.gitBranch).toBe("main");
+    expect(n0.gitDirty).toEqual({ added: 1, modified: 2, deleted: 0 });
     expect(n1.gitBranch).toBeNull();
+    expect(n1.gitDirty).toBeNull();
 
-    st().setGitBranch(l0.id, "main"); // unchanged -> same leaf object
+    // Value-equal dirty counts (a fresh object every invoke) -> same leaf.
+    st().setGitInfo(l0.id, "main", { added: 1, modified: 2, deleted: 0 });
     expect(m.collectLeaves(st().tabs[0].root)[0]).toBe(n0);
+
+    // A count changing produces a new leaf object.
+    st().setGitInfo(l0.id, "main", { added: 1, modified: 3, deleted: 0 });
+    const after = m.collectLeaves(st().tabs[0].root)[0];
+    expect(after).not.toBe(n0);
+    expect(after.gitDirty?.modified).toBe(3);
+
+    // Back to clean (null) in one update alongside the branch.
+    st().setGitInfo(l0.id, "main", null);
+    expect(m.collectLeaves(st().tabs[0].root)[0].gitDirty).toBeNull();
   });
 });
 

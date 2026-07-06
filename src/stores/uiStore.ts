@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type RightPanelTab = "assets" | "review";
+type RightPanelTab = "assets" | "review" | "diff";
 
 interface UiStore {
   leftSidebarOpen: boolean;
@@ -40,7 +40,9 @@ function loadLayout() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const rightPanelTab: RightPanelTab =
-      parsed.rightPanelTab === "review" ? "review" : "assets";
+      parsed.rightPanelTab === "review" || parsed.rightPanelTab === "diff"
+        ? parsed.rightPanelTab
+        : "assets";
     return {
       leftSidebarOpen:
         typeof parsed.leftSidebarOpen === "boolean"
