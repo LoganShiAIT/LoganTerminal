@@ -187,6 +187,8 @@ export default function TabBar() {
         return (
           <div
             key={tab.id}
+            // Pills drag to reorder via pointer capture — never window-drag.
+            data-tauri-drag-region="false"
             ref={(el) => {
               if (el) elsRef.current.set(tab.id, el);
               else elsRef.current.delete(tab.id);

@@ -241,8 +241,11 @@ export default function App() {
   return (
     <div className="relative flex h-screen w-screen flex-col select-none text-ink">
       <AmbientOrbs />
+      {/* "deep" makes the whole header a window-drag surface; Tauri's drag
+          script exempts clickable elements (buttons) by itself, but custom
+          pointer-driven widgets (tab pills) must opt out via ="false". */}
       <header
-        data-tauri-drag-region
+        data-tauri-drag-region="deep"
         className={`relative h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
           isMac ? "pl-20" : "pl-2"
         }`}
