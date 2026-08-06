@@ -10,6 +10,7 @@ import { useActivePane } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { basename, joinPath } from "../../lib/paths";
 import { shellEscapePath } from "../../lib/shellEscape";
+import { t, useT } from "../../i18n";
 
 const MAX_DIRECT_READ_BYTES = 1024 * 1024;
 
@@ -28,6 +29,7 @@ interface FsPathInfo {
 type LoadState = "idle" | "loading" | "ready" | "blocked" | "error";
 
 export default function ReviewPanel() {
+  const t = useT();
   const attachments = useReviewStore((s) => s.attachments);
   const selectedPath = useReviewStore((s) => s.selectedPath);
   const selectPath = useReviewStore((s) => s.selectPath);
@@ -68,15 +70,15 @@ export default function ReviewPanel() {
           setState("blocked");
           setMessage(
             nextInfo.kind === "directory"
-              ? "Select a text file inside this folder to review it."
-              : "This path cannot be reviewed as text.",
+              ? t("Select a text file inside this folder to review it.")
+              : t("This path cannot be reviewed as text."),
           );
           return;
         }
 
         if (nextInfo.size > MAX_DIRECT_READ_BYTES) {
           setState("blocked");
-          setMessage("This file is larger than 1MB, so it was not loaded.");
+          setMessage(t("This file is larger than 1MB, so it was not loaded."));
           return;
         }
 
@@ -114,7 +116,7 @@ export default function ReviewPanel() {
     try {
       await invoke("fs_write_text_file", { path: selectedPath, contents: draft });
       setContent(draft);
-      setMessage("Saved.");
+      setMessage(t("Saved."));
     } catch (err) {
       setMessage(String(err));
     }
@@ -124,12 +126,12 @@ export default function ReviewPanel() {
     <div className="flex h-full flex-col">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
         <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
-          File Review
+          {t("File Review")}
         </div>
         <div className="font-mono text-[11px] text-muted mt-1 truncate">
           {attachments.length === 0
-            ? "drop files or folders to attach"
-            : `${attachments.length} attached`}
+            ? t("drop files or folders to attach")
+            : t("{n} attached", { n: attachments.length })}
         </div>
       </div>
 
@@ -156,33 +158,33 @@ export default function ReviewPanel() {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-ink">
-                  {selectedName || "No file selected"}
+                  {selectedName || t("No file selected")}
                 </div>
                 <div className="truncate font-mono text-[10px] text-faint">
-                  {selectedPath ?? "Attach or select a path to review"}
+                  {selectedPath ?? t("Attach or select a path to review")}
                 </div>
               </div>
               {dirty && (
                 <span className="shrink-0 rounded-full border border-accent/40 px-2 py-0.5 text-[10px] text-accent">
-                  unsaved
+                  {t("unsaved")}
                 </span>
               )}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <PanelButton disabled={!selectedPath} onClick={() => selectedPath && openPath(selectedPath)}>
-                Open
+                {t("Open")}
               </PanelButton>
               <PanelButton disabled={!selectedPath || !activeSessionId} onClick={insertPath}>
-                Insert Path
+                {t("Insert Path")}
               </PanelButton>
               <PanelButton
                 disabled={!selectedPath}
                 onClick={() => selectedPath && navigator.clipboard.writeText(selectedPath)}
               >
-                Copy Path
+                {t("Copy Path")}
               </PanelButton>
               <PanelButton disabled={!dirty || state !== "ready"} onClick={save}>
-                Save
+                {t("Save")}
               </PanelButton>
             </div>
           </div>
@@ -197,8 +199,8 @@ export default function ReviewPanel() {
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-5 text-center text-xs leading-relaxed text-muted">
               {state === "loading"
-                ? "Loading..."
-                : message || "Select a text file to review."}
+                ? t("Loading...")
+                : message || t("Select a text file to review.")}
             </div>
           )}
 
@@ -241,7 +243,7 @@ function AttachmentNode({
         rightSlot={
           <button
             className="h-5 w-5 rounded text-faint opacity-0 transition-colors hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
-            title="Remove attachment"
+            title={t("Remove attachment")}
             onClick={(e) => {
               e.stopPropagation();
               removeAttachment(item.id);
@@ -422,9 +424,10 @@ function PanelButton({
 }
 
 function Placeholder() {
+  const t = useT();
   return (
     <div className="rounded-lg border border-dashed border-edge px-3 py-5 text-center text-[11px] leading-relaxed text-faint">
-      Drop files or folders here to review them.
+      {t("Drop files or folders here to review them.")}
     </div>
   );
 }

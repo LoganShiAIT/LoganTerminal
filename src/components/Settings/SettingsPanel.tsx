@@ -5,10 +5,12 @@ import {
   MAX_FONT_SIZE,
   DEFAULT_FONT_SIZE,
   type CursorStyle,
+  type Locale,
 } from "../../stores/settingsStore";
 import { usePromptStore } from "../../stores/promptStore";
 import { THEMES } from "../../themes";
 import { kbd } from "../../lib/keys";
+import { useT } from "../../i18n";
 
 const ACCENT_PRESETS = [
   "#d97757", // claude coral
@@ -20,6 +22,7 @@ const ACCENT_PRESETS = [
 ];
 
 export default function SettingsPanel() {
+  const t = useT();
   const open = useSettingsStore((s) => s.panelOpen);
   const setOpen = useSettingsStore((s) => s.setPanelOpen);
 
@@ -49,32 +52,36 @@ export default function SettingsPanel() {
       <div className="w-[460px] max-h-[82vh] overflow-y-auto rounded-2xl border border-edge bg-raise shadow-[0_16px_60px_rgba(0,0,0,0.5)] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-edge sticky top-0 bg-raise z-10">
           <div className="text-[11px] uppercase tracking-[0.22em] text-accent font-semibold">
-            Settings
+            {t("Settings")}
           </div>
           <button
             className="w-6 h-6 grid place-items-center rounded-md text-[14px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
             onClick={() => setOpen(false)}
-            title="Close (esc)"
+            title={t("Close (esc)")}
           >
             ×
           </button>
         </div>
 
         <div className="px-5 py-4 space-y-5">
+          <LanguageSection />
           <ThemeSection />
           <AccentSection />
           <FontSizeSection />
           <CursorSection />
           <EffectsSection />
           <NotificationsSection />
+          <MathSection />
           <AgentsSection />
           <PromptsSection />
           <FilesSection />
         </div>
 
         <div className="px-5 pb-4 text-[10px] text-faint">
-          Changes apply instantly and are remembered across restarts. Tip:
-          everything here is also in the command palette ({kbd("⌘P")}).
+          {t(
+            "Changes apply instantly and are remembered across restarts. Tip: everything here is also in the command palette ({key}).",
+            { key: kbd("⌘P") },
+          )}
         </div>
       </div>
     </div>
@@ -90,14 +97,15 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function AgentsSection() {
+  const t = useT();
   const fleetCommand = useSettingsStore((s) => s.fleetCommand);
   const setFleetCommand = useSettingsStore((s) => s.setFleetCommand);
 
   return (
     <div>
-      <SectionLabel>Agents</SectionLabel>
+      <SectionLabel>{t("Agents")}</SectionLabel>
       <div className="space-y-1.5">
-        <div className="text-[11px] text-muted">Fleet command</div>
+        <div className="text-[11px] text-muted">{t("Fleet command")}</div>
         <input
           key={fleetCommand /* re-seed after external changes */}
           defaultValue={fleetCommand}
@@ -110,8 +118,10 @@ function AgentsSection() {
           }}
         />
         <div className="text-[10px] leading-relaxed text-faint">
-          Auto-run in every pane of a new fleet tab ({kbd("⌘P")} → "New fleet
-          tab"). Leave empty for plain shells.
+          {t(
+            'Auto-run in every pane of a new fleet tab ({key} → "New fleet tab"). Leave empty for plain shells.',
+            { key: kbd("⌘P") },
+          )}
         </div>
       </div>
     </div>
@@ -119,6 +129,7 @@ function AgentsSection() {
 }
 
 function PromptsSection() {
+  const t = useT();
   const prompts = usePromptStore((s) => s.prompts);
   const addPrompt = usePromptStore((s) => s.addPrompt);
   const removePrompt = usePromptStore((s) => s.removePrompt);
@@ -140,12 +151,14 @@ function PromptsSection() {
 
   return (
     <div>
-      <SectionLabel>Prompts</SectionLabel>
+      <SectionLabel>{t("Prompts")}</SectionLabel>
       <div className="space-y-2">
         {prompts.length === 0 && (
           <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[11px] leading-relaxed text-faint">
-            Save prompts you feed your agents often — insert them from the
-            command palette ({kbd("⌘P")}) into the focused terminal.
+            {t(
+              "Save prompts you feed your agents often — insert them from the command palette ({key}) into the focused terminal.",
+              { key: kbd("⌘P") },
+            )}
           </div>
         )}
         {prompts.map((p) => (
@@ -162,16 +175,16 @@ function PromptsSection() {
             <button
               className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[12px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
               onClick={() => removePrompt(p.id)}
-              title="Delete prompt"
+              title={t("Delete prompt")}
             >
               ×
             </button>
           </div>
         ))}
-        <input ref={titleRef} placeholder="Prompt title" className={field} />
+        <input ref={titleRef} placeholder={t("Prompt title")} className={field} />
         <textarea
           ref={textRef}
-          placeholder="Prompt text (multi-line ok — it inserts as one bracketed paste)"
+          placeholder={t("Prompt text (multi-line ok — it inserts as one bracketed paste)")}
           rows={3}
           className={`${field} resize-y`}
         />
@@ -179,20 +192,52 @@ function PromptsSection() {
           className="h-7 px-3 rounded-md border border-edge text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
           onClick={add}
         >
-          Add prompt
+          {t("Add prompt")}
         </button>
       </div>
     </div>
   );
 }
 
+function LanguageSection() {
+  const t = useT();
+  const locale = useSettingsStore((s) => s.locale);
+  const setLocale = useSettingsStore((s) => s.setLocale);
+  const options: Array<{ id: Locale; name: string }> = [
+    { id: "zh", name: "中文" },
+    { id: "en", name: "English" },
+  ];
+
+  return (
+    <div>
+      <SectionLabel>{t("Language")}</SectionLabel>
+      <div className="flex items-center gap-2">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => setLocale(o.id)}
+            className={`h-8 px-3 rounded-md border text-[11px] transition-colors ${
+              locale === o.id
+                ? "border-accent text-accent bg-accent/10"
+                : "border-edge text-muted hover:text-ink hover:border-accent/40"
+            }`}
+          >
+            {o.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ThemeSection() {
+  const t = useT();
   const themeId = useSettingsStore((s) => s.themeId);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
   return (
     <div>
-      <SectionLabel>Theme</SectionLabel>
+      <SectionLabel>{t("Theme")}</SectionLabel>
       <div className="grid grid-cols-2 gap-2">
         {THEMES.map((t) => {
           const selected = t.id === themeId;
@@ -239,6 +284,7 @@ function ThemeSection() {
 }
 
 function AccentSection() {
+  const t = useT();
   const accentOverride = useSettingsStore((s) => s.accentOverride);
   const setAccentOverride = useSettingsStore((s) => s.setAccentOverride);
   const colorInputRef = useRef<HTMLInputElement>(null);
@@ -250,7 +296,7 @@ function AccentSection() {
 
   return (
     <div>
-      <SectionLabel>Accent</SectionLabel>
+      <SectionLabel>{t("Accent")}</SectionLabel>
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => setAccentOverride(null)}
@@ -259,9 +305,9 @@ function AccentSection() {
               ? "border-accent text-accent bg-accent/10"
               : "border-edge text-muted hover:text-ink hover:border-accent/40"
           }`}
-          title="Use the theme's own accent"
+          title={t("Use the theme's own accent")}
         >
-          auto
+          {t("auto")}
         </button>
         {ACCENT_PRESETS.map((c) => {
           const selected = c.toLowerCase() === accentOverride?.toLowerCase();
@@ -284,9 +330,9 @@ function AccentSection() {
               ? "border-accent text-accent bg-accent/10"
               : "border-edge text-muted hover:text-ink hover:border-accent/40"
           }`}
-          title="Pick a custom accent color"
+          title={t("Pick a custom accent color")}
         >
-          custom…
+          {t("custom…")}
           <input
             ref={colorInputRef}
             type="color"
@@ -302,6 +348,7 @@ function AccentSection() {
 }
 
 function FontSizeSection() {
+  const t = useT();
   const fontSize = useSettingsStore((s) => s.fontSize);
   const bump = useSettingsStore((s) => s.bumpFontSize);
   const reset = useSettingsStore((s) => s.resetFontSize);
@@ -311,13 +358,13 @@ function FontSizeSection() {
 
   return (
     <div>
-      <SectionLabel>Font size</SectionLabel>
+      <SectionLabel>{t("Font size")}</SectionLabel>
       <div className="flex items-center gap-2">
         <button
           className={btn}
           onClick={() => bump(-1)}
           disabled={fontSize <= MIN_FONT_SIZE}
-          title={`Smaller (${kbd("⌘−")})`}
+          title={t("Smaller ({key})", { key: kbd("⌘−") })}
         >
           −
         </button>
@@ -328,7 +375,7 @@ function FontSizeSection() {
           className={btn}
           onClick={() => bump(1)}
           disabled={fontSize >= MAX_FONT_SIZE}
-          title={`Larger (${kbd("⌘+")})`}
+          title={t("Larger ({key})", { key: kbd("⌘+") })}
         >
           +
         </button>
@@ -336,9 +383,9 @@ function FontSizeSection() {
           <button
             className="h-7 px-2.5 rounded-md text-[11px] text-muted hover:text-ink hover:bg-ink/5 transition-colors"
             onClick={reset}
-            title={`Reset (${kbd("⌘0")})`}
+            title={t("Reset ({key})", { key: kbd("⌘0") })}
           >
-            reset
+            {t("reset")}
           </button>
         )}
       </div>
@@ -380,20 +427,21 @@ function ToggleRow({
 }
 
 function CursorSection() {
+  const t = useT();
   const cursorStyle = useSettingsStore((s) => s.cursorStyle);
   const setCursorStyle = useSettingsStore((s) => s.setCursorStyle);
   const cursorBlink = useSettingsStore((s) => s.cursorBlink);
   const toggleBlink = useSettingsStore((s) => s.toggleCursorBlink);
 
   const styles: Array<{ id: CursorStyle; name: string; glyph: string }> = [
-    { id: "block", name: "Block", glyph: "▮" },
-    { id: "bar", name: "Bar", glyph: "▏" },
-    { id: "underline", name: "Underline", glyph: "▁" },
+    { id: "block", name: t("Block"), glyph: "▮" },
+    { id: "bar", name: t("Bar"), glyph: "▏" },
+    { id: "underline", name: t("Underline"), glyph: "▁" },
   ];
 
   return (
     <div>
-      <SectionLabel>Cursor</SectionLabel>
+      <SectionLabel>{t("Cursor")}</SectionLabel>
       <div className="flex items-center gap-2 flex-wrap">
         {styles.map((s) => {
           const selected = s.id === cursorStyle;
@@ -419,7 +467,7 @@ function CursorSection() {
         <ToggleRow
           checked={cursorBlink}
           onToggle={toggleBlink}
-          label="Blinking cursor"
+          label={t("Blinking cursor")}
         />
       </div>
     </div>
@@ -427,6 +475,7 @@ function CursorSection() {
 }
 
 function EffectsSection() {
+  const t = useT();
   const ambientMotion = useSettingsStore((s) => s.ambientMotion);
   const toggleAmbient = useSettingsStore((s) => s.toggleAmbientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
@@ -434,18 +483,18 @@ function EffectsSection() {
 
   return (
     <div>
-      <SectionLabel>Effects</SectionLabel>
+      <SectionLabel>{t("Effects")}</SectionLabel>
       <div className="space-y-2.5">
         <ToggleRow
           checked={ambientMotion}
           onToggle={toggleAmbient}
-          label="Ambient motion — drifting grid & floating glow"
-          title="Respects the system reduced-motion preference"
+          label={t("Ambient motion — drifting grid & floating glow")}
+          title={t("Respects the system reduced-motion preference")}
         />
         <ToggleRow
           checked={crtMode}
           onToggle={toggleCrt}
-          label="CRT mode — retro scanlines over the terminal"
+          label={t("CRT mode — retro scanlines over the terminal")}
         />
       </div>
     </div>
@@ -453,6 +502,7 @@ function EffectsSection() {
 }
 
 function NotificationsSection() {
+  const t = useT();
   const notifyLong = useSettingsStore((s) => s.notifyLongCommands);
   const toggleLong = useSettingsStore((s) => s.toggleNotifyLongCommands);
   const notifyBell = useSettingsStore((s) => s.notifyBell);
@@ -460,19 +510,47 @@ function NotificationsSection() {
 
   return (
     <div>
-      <SectionLabel>Notifications</SectionLabel>
+      <SectionLabel>{t("Notifications")}</SectionLabel>
       <div className="space-y-2.5">
         <ToggleRow
           checked={notifyLong}
           onToggle={toggleLong}
-          label="Notify when a long command finishes out of view"
-          title="Commands over 10s, when the window is unfocused or the tab is hidden. Needs shell integration (zsh, or bash ≥ 4.4)."
+          label={t("Notify when a long command finishes out of view")}
+          title={t("Commands over 10s, when the window is unfocused or the tab is hidden. Needs shell integration (zsh, or bash ≥ 4.4).")}
         />
         <ToggleRow
           checked={notifyBell}
           onToggle={toggleBell}
-          label="Notify on terminal bell out of view"
-          title="Agent CLIs ring the bell when they need input. At most one toast per pane per 30s."
+          label={t("Notify on terminal bell out of view")}
+          title={t("Agent CLIs ring the bell when they need input. At most one toast per pane per 30s.")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MathSection() {
+  const t = useT();
+  const inline = useSettingsStore((s) => s.mathInline);
+  const toggleInline = useSettingsStore((s) => s.toggleMathInline);
+  const follow = useSettingsStore((s) => s.mathAutoFollow);
+  const toggleFollow = useSettingsStore((s) => s.toggleMathAutoFollow);
+
+  return (
+    <div>
+      <SectionLabel>{t("Math")}</SectionLabel>
+      <div className="space-y-2.5">
+        <ToggleRow
+          checked={inline}
+          onToggle={toggleInline}
+          label={t("Underline LaTeX in terminal output, preview on hover")}
+          title={t("Formulas printed by an agent get a dotted underline; hover shows them typeset, click sends them to the Math panel.")}
+        />
+        <ToggleRow
+          checked={follow}
+          onToggle={toggleFollow}
+          label={t("Math panel follows the newest formula automatically")}
+          title={t("Pauses itself while you have unsaved edits in the panel.")}
         />
       </div>
     </div>
@@ -480,17 +558,18 @@ function NotificationsSection() {
 }
 
 function FilesSection() {
+  const t = useT();
   const showHidden = useSettingsStore((s) => s.showHiddenFiles);
   const toggle = useSettingsStore((s) => s.toggleHiddenFiles);
 
   return (
     <div>
-      <SectionLabel>Files</SectionLabel>
+      <SectionLabel>{t("Files")}</SectionLabel>
       <ToggleRow
         checked={showHidden}
         onToggle={toggle}
-        label="Show hidden files (dotfiles) in the file tree"
-        title="Also affects the eye button in the file tree"
+        label={t("Show hidden files (dotfiles) in the file tree")}
+        title={t("Also affects the eye button in the file tree")}
       />
     </div>
   );

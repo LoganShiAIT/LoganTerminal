@@ -14,6 +14,7 @@ import { recentActionIds, recordAction, recencyBoost } from "../../lib/recency";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
 import { basename } from "../../lib/paths";
+import { t } from "../../i18n";
 
 interface PaletteAction {
   id: string;
@@ -52,6 +53,9 @@ function useActions(): PaletteAction[] {
   const crtMode = useSettingsStore((s) => s.crtMode);
   const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
   const notifyBell = useSettingsStore((s) => s.notifyBell);
+  const locale = useSettingsStore((s) => s.locale);
+  const mathInline = useSettingsStore((s) => s.mathInline);
+  const mathAutoFollow = useSettingsStore((s) => s.mathAutoFollow);
   const fleetCommand = useSettingsStore((s) => s.fleetCommand);
   const rightPanelTab = useUiStore((s) => s.rightPanelTab);
   const prompts = usePromptStore((s) => s.prompts);
@@ -69,8 +73,8 @@ function useActions(): PaletteAction[] {
     if (attn.length > 0) {
       actions.push({
         id: "attn-next",
-        group: "Agents",
-        label: `Go to pane needing attention (${attn.length} waiting)`,
+        group: t("Agents"),
+        label: t("Go to pane needing attention ({n} waiting)", { n: attn.length }),
         transient: true,
         run: () => pty().jumpToAttention(),
       });
@@ -78,8 +82,12 @@ function useActions(): PaletteAction[] {
         const cwd = leaf.cwd ?? leaf.initialCwd;
         actions.push({
           id: `attn-${leaf.id}`,
-          group: "Agents",
-          label: `${leaf.agentName ?? "shell"} needs attention — tab ${tabIndex + 1}${cwd ? ` · ${basename(cwd) || "/"}` : ""}`,
+          group: t("Agents"),
+          label: t("{agent} needs attention — tab {n}{where}", {
+            agent: leaf.agentName ?? t("shell"),
+            n: tabIndex + 1,
+            where: cwd ? ` · ${basename(cwd) || "/"}` : "",
+          }),
           transient: true,
           run: () => {
             pty().setActiveTab(tab.id);
@@ -91,8 +99,8 @@ function useActions(): PaletteAction[] {
 
     actions.push({
       id: "agent-overview",
-      group: "Agents",
-      label: "Agent overview — every pane, state, branch",
+      group: t("Agents"),
+      label: t("Agent overview — every pane, state, branch"),
       hint: kbd("⌘⇧O"),
       keepFocus: true,
       run: () => ui().setDashboardOpen(true),
@@ -100,8 +108,8 @@ function useActions(): PaletteAction[] {
 
     actions.push({
       id: "worktree-modal",
-      group: "Agents",
-      label: "Worktrees — new agent worktree / manage",
+      group: t("Agents"),
+      label: t("Worktrees — new agent worktree / manage"),
       hint: kbd("⌘⇧N"),
       keepFocus: true,
       run: () => ui().setWorktreeModalOpen(true),
@@ -112,20 +120,25 @@ function useActions(): PaletteAction[] {
     if (activePane && !activePane.exited) {
       actions.push({
         id: "agent-prompt-timer-reset",
-        group: "Agents",
-        label: "Start/reset prompt timer",
+        group: t("Agents"),
+        label: t("Start/reset prompt timer"),
         run: () => pty().markPromptSent(activePane.id),
       });
     }
 
     // Fleet spawn — clave-style grid + claude-squad-style launch command.
     const fleetCmd = fleetCommand.trim();
-    const fleetLabel = fleetCmd ? `running \`${fleetCmd}\`` : "plain shells";
+    const fleetLabel = fleetCmd
+      ? t("running `{cmd}`", { cmd: fleetCmd })
+      : t("plain shells");
     for (const panes of [2, 4] as const) {
       actions.push({
         id: `fleet-new-${panes}`,
-        group: "Agents",
-        label: `New fleet tab — ${panes === 2 ? "2 panes" : "2×2 grid"}, ${fleetLabel}`,
+        group: t("Agents"),
+        label: t("New fleet tab — {panes}, {cmd}", {
+          panes: panes === 2 ? t("2 panes") : t("2×2 grid"),
+          cmd: fleetLabel,
+        }),
         run: () => pty().addFleetTab(panes, fleetCmd || null),
       });
     }
@@ -135,8 +148,11 @@ function useActions(): PaletteAction[] {
       const cwd = leaf.cwd ?? leaf.initialCwd;
       actions.push({
         id: `tab-${tab.id}`,
-        group: "Tabs",
-        label: `Go to tab ${i + 1} — ${cwd ? basename(cwd) || "/" : "shell"}`,
+        group: t("Tabs"),
+        label: t("Go to tab {n} — {where}", {
+          n: i + 1,
+          where: cwd ? basename(cwd) || "/" : t("shell"),
+        }),
         hint: i < 9 ? kbd(`⌘${i + 1}`) : undefined,
         active: tab.id === activeTabId,
         transient: true,
@@ -146,8 +162,8 @@ function useActions(): PaletteAction[] {
     actions.push(
       {
         id: "tab-new",
-        group: "Tabs",
-        label: "New tab",
+        group: t("Tabs"),
+        label: t("New tab"),
         hint: kbd("⌘T"),
         run: () => {
           const leaf = getActiveLeaf();
@@ -156,8 +172,8 @@ function useActions(): PaletteAction[] {
       },
       {
         id: "tab-close",
-        group: "Tabs",
-        label: "Close current tab",
+        group: t("Tabs"),
+        label: t("Close current tab"),
         run: () => {
           const s = pty();
           if (s.activeTabId) s.closeTab(s.activeTabId);
@@ -165,15 +181,15 @@ function useActions(): PaletteAction[] {
       },
       {
         id: "tab-next",
-        group: "Tabs",
-        label: "Next tab",
+        group: t("Tabs"),
+        label: t("Next tab"),
         hint: kbd("⌘⇧]"),
         run: () => pty().cycleTab(1),
       },
       {
         id: "tab-prev",
-        group: "Tabs",
-        label: "Previous tab",
+        group: t("Tabs"),
+        label: t("Previous tab"),
         hint: kbd("⌘⇧["),
         run: () => pty().cycleTab(-1),
       },
@@ -182,42 +198,42 @@ function useActions(): PaletteAction[] {
     actions.push(
       {
         id: "pane-split-right",
-        group: "Panes",
-        label: "Split pane right",
+        group: t("Panes"),
+        label: t("Split pane right"),
         hint: kbd("⌘D"),
         run: () => pty().splitPane("row"),
       },
       {
         id: "pane-split-down",
-        group: "Panes",
-        label: "Split pane down",
+        group: t("Panes"),
+        label: t("Split pane down"),
         hint: kbd("⌘⇧D"),
         run: () => pty().splitPane("col"),
       },
       {
         id: "pane-close",
-        group: "Panes",
-        label: "Close pane (last pane closes the tab)",
+        group: t("Panes"),
+        label: t("Close pane (last pane closes the tab)"),
         hint: kbd("⌘⇧W"),
         run: () => pty().closeActivePane(),
       },
       {
         id: "pane-next",
-        group: "Panes",
-        label: "Focus next pane",
+        group: t("Panes"),
+        label: t("Focus next pane"),
         run: () => pty().cyclePane(1),
       },
       {
         id: "pane-zoom",
-        group: "Panes",
-        label: "Toggle pane zoom (maximize)",
+        group: t("Panes"),
+        label: t("Toggle pane zoom (maximize)"),
         hint: kbd("⌘⇧Z"),
         run: () => pty().toggleZoom(),
       },
       {
         id: "pane-broadcast",
-        group: "Panes",
-        label: "Toggle broadcast input (type into all panes)",
+        group: t("Panes"),
+        label: t("Toggle broadcast input (type into all panes)"),
         hint: kbd("⌘⌥I"),
         active: tabs.find((t) => t.id === activeTabId)?.broadcast ?? false,
         run: () => {
@@ -230,78 +246,78 @@ function useActions(): PaletteAction[] {
     actions.push(
       {
         id: "term-clear",
-        group: "Terminal",
-        label: "Clear terminal",
+        group: t("Terminal"),
+        label: t("Clear terminal"),
         hint: kbd("⌘K"),
         run: () => sendTermCmd("clear"),
       },
       {
         id: "term-find",
-        group: "Terminal",
-        label: "Find in scrollback",
+        group: t("Terminal"),
+        label: t("Find in scrollback"),
         hint: kbd("⌘F"),
         keepFocus: true,
         run: () => sendTermCmd("find"),
       },
       {
         id: "term-bottom",
-        group: "Terminal",
-        label: "Scroll to bottom",
+        group: t("Terminal"),
+        label: t("Scroll to bottom"),
         run: () => sendTermCmd("scroll-bottom"),
       },
       {
         id: "term-prompt-prev",
-        group: "Terminal",
-        label: "Jump to previous prompt",
+        group: t("Terminal"),
+        label: t("Jump to previous prompt"),
         hint: kbd("⌘↑"),
         run: () => sendTermCmd("prompt-prev"),
       },
       {
         id: "term-prompt-next",
-        group: "Terminal",
-        label: "Jump to next prompt",
+        group: t("Terminal"),
+        label: t("Jump to next prompt"),
         hint: kbd("⌘↓"),
         run: () => sendTermCmd("prompt-next"),
       },
       {
         id: "term-select-output",
-        group: "Terminal",
-        label: "Select last command output",
+        group: t("Terminal"),
+        label: t("Select last command output"),
         hint: kbd("⌘⇧A"),
         run: () => sendTermCmd("select-output"),
       },
       {
         id: "term-notify-long",
-        group: "Terminal",
-        label: "Toggle long-command notifications",
+        group: t("Terminal"),
+        label: t("Toggle long-command notifications"),
         active: notifyLongCommands,
         run: () => settings().toggleNotifyLongCommands(),
       },
       {
         id: "term-notify-bell",
-        group: "Terminal",
-        label: "Toggle bell notifications",
+        group: t("Terminal"),
+        label: t("Toggle bell notifications"),
         active: notifyBell,
         run: () => settings().toggleNotifyBell(),
       },
       {
         id: "font-up",
-        group: "Terminal",
-        label: "Increase font size",
+        group: t("Terminal"),
+        label: t("Increase font size"),
         hint: kbd("⌘+"),
         run: () => settings().bumpFontSize(1),
       },
       {
         id: "font-down",
-        group: "Terminal",
-        label: "Decrease font size",
+        group: t("Terminal"),
+        label: t("Decrease font size"),
         hint: kbd("⌘−"),
         run: () => settings().bumpFontSize(-1),
       },
       {
         id: "font-reset",
-        group: "Terminal",
-        label: "Reset font size",
+        group: t("Terminal"),
+        label: t("Reset font size"),
         hint: kbd("⌘0"),
         run: () => settings().resetFontSize(),
       },
@@ -309,23 +325,31 @@ function useActions(): PaletteAction[] {
 
     actions.push(
       {
+        id: "file-search",
+        group: t("Files"),
+        label: t("Find file or folder in this project"),
+        hint: kbd("⌘⇧F"),
+        keepFocus: true,
+        run: () => ui().setFileSearchOpen(true),
+      },
+      {
         id: "view-left",
-        group: "View",
-        label: "Toggle files sidebar",
+        group: t("View"),
+        label: t("Toggle files sidebar"),
         hint: kbd("⌘B"),
         run: () => ui().toggleLeftSidebar(),
       },
       {
         id: "view-right",
-        group: "View",
-        label: "Toggle assets / review sidebar",
+        group: t("View"),
+        label: t("Toggle assets / review sidebar"),
         hint: kbd("⌘J"),
         run: () => ui().toggleRightSidebar(),
       },
       {
         id: "view-assets",
-        group: "View",
-        label: "Show assets panel",
+        group: t("View"),
+        label: t("Show assets panel"),
         active: rightPanelTab === "assets",
         run: () => {
           const s = ui();
@@ -335,8 +359,8 @@ function useActions(): PaletteAction[] {
       },
       {
         id: "view-review",
-        group: "View",
-        label: "Show review panel",
+        group: t("View"),
+        label: t("Show review panel"),
         active: rightPanelTab === "review",
         run: () => {
           const s = ui();
@@ -346,8 +370,8 @@ function useActions(): PaletteAction[] {
       },
       {
         id: "view-diff",
-        group: "View",
-        label: "Show git diff panel",
+        group: t("View"),
+        label: t("Show git diff panel"),
         hint: kbd("⌘⇧G"),
         active: rightPanelTab === "diff",
         run: () => {
@@ -357,9 +381,51 @@ function useActions(): PaletteAction[] {
         },
       },
       {
+        id: "view-math",
+        group: t("View"),
+        label: t("Render selection as math / markdown"),
+        hint: kbd("⌘⇧M"),
+        keepFocus: true,
+        active: rightPanelTab === "math",
+        run: () => {
+          const s = ui();
+          sendTermCmd("send-selection");
+          s.setRightPanelTab("math");
+          if (!s.rightSidebarOpen) s.toggleRightSidebar();
+        },
+      },
+      {
+        id: "math-inline",
+        group: t("View"),
+        label: t("Toggle inline math underline in terminal output"),
+        active: mathInline,
+        run: () => settings().toggleMathInline(),
+      },
+      {
+        id: "math-auto-follow",
+        group: t("View"),
+        label: t("Toggle math panel auto-follow"),
+        active: mathAutoFollow,
+        run: () => settings().toggleMathAutoFollow(),
+      },
+      {
+        id: "locale-zh",
+        group: t("Appearance"),
+        label: t("Language: {name}", { name: "中文" }),
+        active: locale === "zh",
+        run: () => settings().setLocale("zh"),
+      },
+      {
+        id: "locale-en",
+        group: t("Appearance"),
+        label: t("Language: {name}", { name: "English" }),
+        active: locale === "en",
+        run: () => settings().setLocale("en"),
+      },
+      {
         id: "view-settings",
-        group: "View",
-        label: "Open settings",
+        group: t("View"),
+        label: t("Open settings"),
         hint: kbd("⌘,"),
         keepFocus: true,
         run: () => settings().setPanelOpen(true),
@@ -371,8 +437,8 @@ function useActions(): PaletteAction[] {
     for (const p of prompts) {
       actions.push({
         id: `prompt-${p.id}`,
-        group: "Prompts",
-        label: `Insert prompt: ${p.title}`,
+        group: t("Prompts"),
+        label: t("Insert prompt: {title}", { title: p.title }),
         run: () => sendTermCmd({ kind: "paste", text: p.text }),
       });
     }
@@ -380,8 +446,8 @@ function useActions(): PaletteAction[] {
     for (const theme of THEMES) {
       actions.push({
         id: `theme-${theme.id}`,
-        group: "Appearance",
-        label: `Theme: ${theme.name}`,
+        group: t("Appearance"),
+        label: t("Theme: {name}", { name: theme.name }),
         swatch: theme.ui.accent,
         active: theme.id === themeId,
         run: () => settings().setTheme(theme.id),
@@ -389,16 +455,16 @@ function useActions(): PaletteAction[] {
     }
     actions.push({
       id: "accent-auto",
-      group: "Appearance",
-      label: "Accent: Auto (theme default)",
+      group: t("Appearance"),
+      label: t("Accent: Auto (theme default)"),
       active: accentOverride === null,
       run: () => settings().setAccentOverride(null),
     });
     for (const a of ACCENT_CHOICES) {
       actions.push({
         id: `accent-${a.name}`,
-        group: "Appearance",
-        label: `Accent: ${a.name}`,
+        group: t("Appearance"),
+        label: t("Accent: {name}", { name: t(a.name) }),
         swatch: a.color,
         active: a.color.toLowerCase() === accentOverride?.toLowerCase(),
         run: () => settings().setAccentOverride(a.color),
@@ -412,8 +478,8 @@ function useActions(): PaletteAction[] {
     for (const c of cursorStyles) {
       actions.push({
         id: `cursor-${c.id}`,
-        group: "Appearance",
-        label: `Cursor: ${c.name}`,
+        group: t("Appearance"),
+        label: t("Cursor: {name}", { name: t(c.name) }),
         active: cursorStyle === c.id,
         run: () => settings().setCursorStyle(c.id),
       });
@@ -421,22 +487,22 @@ function useActions(): PaletteAction[] {
     actions.push(
       {
         id: "fx-cursor-blink",
-        group: "Appearance",
-        label: "Toggle cursor blink",
+        group: t("Appearance"),
+        label: t("Toggle cursor blink"),
         active: cursorBlink,
         run: () => settings().toggleCursorBlink(),
       },
       {
         id: "fx-ambient",
-        group: "Appearance",
-        label: "Toggle ambient motion",
+        group: t("Appearance"),
+        label: t("Toggle ambient motion"),
         active: ambientMotion,
         run: () => settings().toggleAmbientMotion(),
       },
       {
         id: "fx-crt",
-        group: "Appearance",
-        label: "Toggle CRT mode",
+        group: t("Appearance"),
+        label: t("Toggle CRT mode"),
         active: crtMode,
         run: () => settings().toggleCrtMode(),
       },
@@ -454,6 +520,9 @@ function useActions(): PaletteAction[] {
     crtMode,
     notifyLongCommands,
     notifyBell,
+    locale,
+    mathInline,
+    mathAutoFollow,
     fleetCommand,
     rightPanelTab,
     prompts,
@@ -560,7 +629,7 @@ export default function CommandPalette() {
             ref={inputRef}
             type="text"
             spellCheck={false}
-            placeholder="Type a command… themes, tabs, effects, anything"
+            placeholder={t("Type a command… themes, tabs, effects, anything")}
             className="flex-1 bg-transparent font-mono text-[13px] text-ink placeholder:text-faint focus:outline-none"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -588,14 +657,14 @@ export default function CommandPalette() {
         <div className="max-h-[46vh] overflow-y-auto py-1.5">
           {results.length === 0 && (
             <div className="px-4 py-6 text-center text-xs text-faint">
-              No matching commands
+              {t("No matching commands")}
             </div>
           )}
           {results.map((r, i) => {
             // Recent rows form their own pseudo-group; the same action can
             // appear again below in its real group (hence the key prefix).
             const groupOf = (x: typeof r) =>
-              x.recent ? "Recent" : x.action.group;
+              x.recent ? t("Recent") : x.action.group;
             const showHeader =
               grouped && (i === 0 || groupOf(results[i - 1]) !== groupOf(r));
             const isSelected = i === selected;
@@ -631,7 +700,7 @@ export default function CommandPalette() {
                   {r.action.active && (
                     <span
                       className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                      title="Currently active"
+                      title={t("Currently active")}
                     />
                   )}
                   {r.action.hint && (
@@ -645,16 +714,16 @@ export default function CommandPalette() {
 
         <div className="flex h-8 items-center gap-3 border-t border-edge px-4 text-[10px] text-faint">
           <span>
-            <span className="text-muted">↑↓</span> navigate
+            <span className="text-muted">↑↓</span> {t("navigate")}
           </span>
           <span>
-            <span className="text-muted">↩</span> run
+            <span className="text-muted">↩</span> {t("run")}
           </span>
           <span>
-            <span className="text-muted">esc</span> close
+            <span className="text-muted">esc</span> {t("close")}
           </span>
           <span className="ml-auto font-mono">
-            {results.length} command{results.length === 1 ? "" : "s"}
+            {t("{n} commands", { n: results.length })}
           </span>
         </div>
       </div>

@@ -6,6 +6,14 @@ export const MAX_FONT_SIZE = 28;
 export const DEFAULT_FONT_SIZE = 13;
 
 export type CursorStyle = "block" | "bar" | "underline";
+export type Locale = "zh" | "en";
+
+/** First run follows the OS: a zh-* UI language starts the app in Chinese. */
+function loadLocale(): Locale {
+  const raw = localStorage.getItem(LOCALE_KEY);
+  if (raw === "zh" || raw === "en") return raw;
+  return navigator.language?.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
 
 const FONT_SIZE_KEY = "logan.fontSize";
 const SHOW_HIDDEN_KEY = "logan.showHiddenFiles";
@@ -18,6 +26,9 @@ const CRT_KEY = "logan.crt";
 const NOTIFY_LONG_KEY = "logan.notifyLongCmds";
 const NOTIFY_BELL_KEY = "logan.notifyBell";
 const FLEET_CMD_KEY = "logan.fleetCommand";
+const LOCALE_KEY = "logan.locale";
+const MATH_INLINE_KEY = "logan.mathInline";
+const MATH_FOLLOW_KEY = "logan.mathAutoFollow";
 const DEFAULT_FLEET_CMD = "claude";
 
 function loadFontSize(): number {
@@ -54,6 +65,8 @@ function applyAmbientAttr(on: boolean) {
 }
 
 interface SettingsStore {
+  /** UI language. Terminal content is never touched by this. */
+  locale: Locale;
   fontSize: number;
   showHiddenFiles: boolean;
   themeId: string;
@@ -69,6 +82,10 @@ interface SettingsStore {
   notifyLongCommands: boolean;
   /** Desktop toast when a terminal bell rings out of view (agent prompts). */
   notifyBell: boolean;
+  /** Underline LaTeX in terminal output and preview it on hover. */
+  mathInline: boolean;
+  /** Push newly-printed formulas into the Math panel automatically. */
+  mathAutoFollow: boolean;
   /**
    * Command auto-run in every pane of a fleet tab (⌘P → "New fleet tab").
    * Empty string = spawn plain shells.
@@ -76,6 +93,7 @@ interface SettingsStore {
   fleetCommand: string;
   /** Settings panel visibility — UI state, not persisted. */
   panelOpen: boolean;
+  setLocale: (locale: Locale) => void;
   bumpFontSize: (delta: number) => void;
   resetFontSize: () => void;
   toggleHiddenFiles: () => void;
@@ -87,11 +105,14 @@ interface SettingsStore {
   toggleCrtMode: () => void;
   toggleNotifyLongCommands: () => void;
   toggleNotifyBell: () => void;
+  toggleMathInline: () => void;
+  toggleMathAutoFollow: () => void;
   setFleetCommand: (cmd: string) => void;
   setPanelOpen: (open: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  locale: loadLocale(),
   fontSize: loadFontSize(),
   showHiddenFiles: localStorage.getItem(SHOW_HIDDEN_KEY) === "1",
   themeId: loadThemeId(),
@@ -102,8 +123,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   crtMode: loadBool(CRT_KEY, false),
   notifyLongCommands: loadBool(NOTIFY_LONG_KEY, true),
   notifyBell: loadBool(NOTIFY_BELL_KEY, true),
+  mathInline: loadBool(MATH_INLINE_KEY, true),
+  mathAutoFollow: loadBool(MATH_FOLLOW_KEY, true),
   fleetCommand: localStorage.getItem(FLEET_CMD_KEY) ?? DEFAULT_FLEET_CMD,
   panelOpen: false,
+  setLocale: (locale) => {
+    localStorage.setItem(LOCALE_KEY, locale);
+    set({ locale });
+  },
   bumpFontSize: (delta) => {
     const next = Math.max(
       MIN_FONT_SIZE,
@@ -162,6 +189,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = !get().notifyBell;
     localStorage.setItem(NOTIFY_BELL_KEY, next ? "1" : "0");
     set({ notifyBell: next });
+  },
+  toggleMathInline: () => {
+    const next = !get().mathInline;
+    localStorage.setItem(MATH_INLINE_KEY, next ? "1" : "0");
+    set({ mathInline: next });
+  },
+  toggleMathAutoFollow: () => {
+    const next = !get().mathAutoFollow;
+    localStorage.setItem(MATH_FOLLOW_KEY, next ? "1" : "0");
+    set({ mathAutoFollow: next });
   },
   setFleetCommand: (cmd) => {
     const trimmed = cmd.trim();

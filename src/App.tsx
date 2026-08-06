@@ -8,6 +8,8 @@ import TabBar from "./components/TabBar/TabBar";
 import PaneTree from "./components/PaneTree/PaneTree";
 import SettingsPanel from "./components/Settings/SettingsPanel";
 import CommandPalette from "./components/CommandPalette/CommandPalette";
+import FileSearch from "./components/FileSearch/FileSearch";
+import MathHoverLayer from "./components/MathHover/MathHoverLayer";
 import AgentDashboard from "./components/AgentDashboard/AgentDashboard";
 import WorktreeModal from "./components/WorktreeModal/WorktreeModal";
 import {
@@ -27,6 +29,7 @@ import { attachReviewPaths } from "./lib/reviewAttachments";
 import { sendTermCmd } from "./lib/termBus";
 import { kbd } from "./lib/keys";
 import { dirtyTotal } from "./lib/git";
+import { useT } from "./i18n";
 
 const isMac = navigator.userAgent.includes("Mac");
 const CLAUDE_CACHE_WINDOW_MS = 5 * 60 * 1000;
@@ -68,6 +71,7 @@ function focusDirectionalPane(dir: "left" | "right" | "up" | "down") {
 }
 
 export default function App() {
+  const t = useT();
   const tabs = usePtyStore((s) => s.tabs);
   const activeTabId = usePtyStore((s) => s.activeTabId);
   const leftSidebarOpen = useUiStore((s) => s.leftSidebarOpen);
@@ -211,6 +215,12 @@ export default function App() {
         e.preventDefault();
         const ui = useUiStore.getState();
         ui.setDashboardOpen(!ui.dashboardOpen);
+      } else if ((e.key === "f" || e.key === "F") && e.shiftKey) {
+        // Plain ⌘F stays with xterm's scrollback search (Terminal.tsx);
+        // ⇧ widens the search from "this pane's output" to "the disk".
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        ui.setFileSearchOpen(!ui.fileSearchOpen);
       } else if ((e.key === "n" || e.key === "N") && e.shiftKey) {
         e.preventDefault();
         const ui = useUiStore.getState();
@@ -224,6 +234,18 @@ export default function App() {
           ui.toggleRightSidebar();
         } else {
           ui.setRightPanelTab("diff");
+          if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
+        }
+      } else if ((e.key === "m" || e.key === "M") && e.shiftKey) {
+        // Math preview: pull the terminal selection (or the last command's
+        // output) into the panel and show it.
+        e.preventDefault();
+        const ui = useUiStore.getState();
+        if (ui.rightSidebarOpen && ui.rightPanelTab === "math") {
+          ui.toggleRightSidebar();
+        } else {
+          sendTermCmd("send-selection");
+          ui.setRightPanelTab("math");
           if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
         }
       } else if ((e.key === "b" || e.key === "B") && !e.shiftKey) {
@@ -257,7 +279,7 @@ export default function App() {
               : "text-muted hover:text-accent hover:bg-accent/[0.08]"
           }`}
           onClick={toggleLeftSidebar}
-          title="Toggle file sidebar"
+          title={t("Toggle file sidebar")}
         >
           <SidebarIcon side="left" />
         </button>
@@ -270,14 +292,14 @@ export default function App() {
               : "text-muted hover:text-accent hover:bg-accent/[0.08]"
           }`}
           onClick={toggleRightSidebar}
-          title="Toggle review sidebar"
+          title={t("Toggle review sidebar")}
         >
           <SidebarIcon side="right" />
         </button>
         <button
           className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-muted hover:text-accent hover:bg-accent/[0.08] transition-colors"
           onClick={() => useSettingsStore.getState().setPanelOpen(true)}
-          title={`Settings (${kbd("⌘,")})`}
+          title={t("Settings ({key})", { key: kbd("⌘,") })}
         >
           <GearIcon />
         </button>
@@ -349,6 +371,8 @@ export default function App() {
       <DropOverlay />
       <SettingsPanel />
       <CommandPalette />
+      <FileSearch />
+      <MathHoverLayer />
       <AgentDashboard />
       <WorktreeModal />
     </div>
@@ -399,6 +423,7 @@ function ResizeHandle({
   side: "left" | "right";
   active: boolean;
 }) {
+  const t = useT();
   const setLeftSidebarWidth = useUiStore((s) => s.setLeftSidebarWidth);
   const setRightSidebarWidth = useUiStore((s) => s.setRightSidebarWidth);
 
@@ -427,7 +452,7 @@ function ResizeHandle({
         active ? "w-1 cursor-col-resize opacity-100" : "w-0 opacity-0"
       }`}
       onMouseDown={startDrag}
-      title="Resize sidebar"
+      title={t("Resize sidebar")}
     >
       <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-edge transition-colors group-hover:bg-accent/70" />
     </div>
@@ -471,6 +496,7 @@ function GearIcon() {
 }
 
 function StatusCluster() {
+  const t = useT();
   const activeTab = useActiveTab();
   const pane = useActivePane();
   const attnCount = usePtyStore((s) => attentionPanes(s.tabs).length);
@@ -509,9 +535,11 @@ function StatusCluster() {
           onClick={() =>
             usePtyStore.getState().toggleBroadcast(activeTab.id)
           }
-          title="Broadcast is ON — keystrokes go to every pane in this tab. Click to turn off."
+          title={t(
+            "Broadcast is ON — keystrokes go to every pane in this tab. Click to turn off.",
+          )}
         >
-          ⇶ broadcast
+          ⇶ {t("broadcast")}
         </button>
       )}
       {attnCount > 0 && (
@@ -521,10 +549,13 @@ function StatusCluster() {
             usePtyStore.getState().jumpToAttention();
             requestAnimationFrame(() => sendTermCmd("focus"));
           }}
-          title={`Panes waiting on you (bell / long command done) — click to jump, ${kbd("⌘⇧O")} for the full overview`}
+          title={t(
+            "Panes waiting on you (bell / long command done) — click to jump, {key} for the full overview",
+            { key: kbd("⌘⇧O") },
+          )}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-          {attnCount} waiting
+          {t("{n} waiting", { n: attnCount })}
         </button>
       )}
       {pane?.gitBranch && !exited && (
@@ -535,11 +566,20 @@ function StatusCluster() {
             ui.setRightPanelTab("diff");
             if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
           }}
-          title={`Git branch of ${cwd ?? "cwd"}${
-            dirtyTotal(pane.gitDirty) > 0
-              ? ` · uncommitted: ${pane.gitDirty!.added} new, ${pane.gitDirty!.modified} modified, ${pane.gitDirty!.deleted} deleted`
-              : " · clean"
-          } — click for the diff panel (${kbd("⌘⇧G")})`}
+          title={
+            t("Git branch of {where}", { where: cwd ?? t("cwd") }) +
+            (dirtyTotal(pane.gitDirty) > 0
+              ? t(
+                  " · uncommitted: {added} new, {modified} modified, {deleted} deleted",
+                  {
+                    added: pane.gitDirty!.added,
+                    modified: pane.gitDirty!.modified,
+                    deleted: pane.gitDirty!.deleted,
+                  },
+                )
+              : t(" · clean")) +
+            t(" — click for the diff panel ({key})", { key: kbd("⌘⇧G") })
+          }
         >
           <GitBranchIcon />
           <span className="truncate">{pane.gitBranch}</span>
@@ -561,7 +601,7 @@ function StatusCluster() {
       {pane?.agentName && !exited && (
         <span
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
-          title={`Detected agent: ${pane.agentName}`}
+          title={t("Detected agent: {name}", { name: pane.agentName })}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           {pane.agentName}
@@ -586,8 +626,10 @@ function StatusCluster() {
           onClick={() => usePtyStore.getState().markPromptSent(pane.id)}
           title={
             promptSentAt
-              ? `${cacheWindowOpen ? "Claude cache window" : "Cache window passed"} · click to reset timer`
-              : "Start prompt timer"
+              ? (cacheWindowOpen
+                  ? t("Claude cache window")
+                  : t("Cache window passed")) + t(" · click to reset timer")
+              : t("Start prompt timer")
           }
         >
           {promptSentAt && (
@@ -597,7 +639,9 @@ function StatusCluster() {
             />
           )}
           <ClockIcon />
-          <span>{promptElapsedMs === null ? "timer" : formatDuration(promptElapsedMs)}</span>
+          <span>
+            {promptElapsedMs === null ? t("timer") : formatDuration(promptElapsedMs)}
+          </span>
         </button>
       )}
       {/* Only surface anomalies — a clean exit says nothing here. Requires
@@ -605,7 +649,7 @@ function StatusCluster() {
       {!exited && pane?.lastExitCode != null && pane.lastExitCode !== 0 && (
         <span
           className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-red-300 bg-red-500/15 border border-red-400/40"
-          title="Last command's exit status"
+          title={t("Last command's exit status")}
         >
           exit {pane.lastExitCode}
         </span>
@@ -614,7 +658,7 @@ function StatusCluster() {
       {!exited && pane?.lastDurationMs != null && pane.lastDurationMs >= 2000 && (
         <span
           className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge"
-          title="Last command's duration"
+          title={t("Last command's duration")}
         >
           {formatDuration(pane.lastDurationMs)}
         </span>
@@ -623,7 +667,8 @@ function StatusCluster() {
         className="flex items-center gap-1.5 font-mono text-[11px] text-muted"
         title={
           pane?.sessionId
-            ? `session ${pane.sessionId.slice(0, 8)}${cwd ? ` · ${cwd}` : ""}`
+            ? t("session {id}", { id: pane.sessionId.slice(0, 8) }) +
+              (cwd ? ` · ${cwd}` : "")
             : undefined
         }
       >
@@ -638,14 +683,14 @@ function StatusCluster() {
         />
         <span className="truncate max-w-[240px]">
           {exited
-            ? `exited — ${kbd("⌘⇧W")} to close`
+            ? t("exited — {key} to close", { key: kbd("⌘⇧W") })
             : live
               ? cwd
                 ? tildify(cwd, home)
-                : "shell"
+                : t("shell")
               : activeTab
-                ? "starting…"
-                : "no session"}
+                ? t("starting…")
+                : t("no session")}
         </span>
       </span>
     </div>
@@ -694,6 +739,7 @@ function ClockIcon() {
 }
 
 function WelcomeScreen() {
+  const t = useT();
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-7">
       <div className="grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 bg-raise/50 backdrop-blur-sm animate-[glow-breathe_4.5s_ease-in-out_infinite]">
@@ -707,48 +753,53 @@ function WelcomeScreen() {
           LoganTerminal
         </div>
         <div className="font-mono text-xs text-muted">
-          <span className="type-in">a terminal built for AI coding agents</span>
+          <span className="type-in">
+            {t("a terminal built for AI coding agents")}
+          </span>
         </div>
       </div>
       <button
         className="px-4 py-1.5 rounded-full border border-accent/40 text-accent text-sm hover:bg-accent/10 hover:border-accent/70 hover:shadow-[0_0_24px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] transition-[color,border-color,box-shadow]"
         onClick={() => usePtyStore.getState().addTab()}
       >
-        New Terminal
+        {t("New Terminal")}
       </button>
       <div className="flex max-w-[80%] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-faint">
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘P")}</span> commands
+          <span className="kbd">{kbd("⌘P")}</span> {t("commands")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘T")}</span> new tab
+          <span className="kbd">{kbd("⌘T")}</span> {t("new tab")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘D")}</span> split
+          <span className="kbd">{kbd("⌘D")}</span> {t("split")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘⇧Z")}</span> zoom pane
+          <span className="kbd">{kbd("⌘⇧Z")}</span> {t("zoom pane")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘F")}</span> find
+          <span className="kbd">{kbd("⌘F")}</span> {t("find")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘K")}</span> clear
+          <span className="kbd">{kbd("⌘⇧F")}</span> {t("find files")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘↑↓")}</span> jump prompts
+          <span className="kbd">{kbd("⌘K")}</span> {t("clear")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘B")}</span> files
+          <span className="kbd">{kbd("⌘↑↓")}</span> {t("jump prompts")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘J")}</span> assets
+          <span className="kbd">{kbd("⌘B")}</span> {t("files")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘1-9")}</span> jump
+          <span className="kbd">{kbd("⌘J")}</span> {t("assets")}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="kbd">{kbd("⌘,")}</span> settings
+          <span className="kbd">{kbd("⌘1-9")}</span> {t("jump")}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="kbd">{kbd("⌘,")}</span> {t("settings")}
         </span>
       </div>
     </div>

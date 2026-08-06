@@ -8,6 +8,7 @@ import {
   type SplitPane,
   type PtyTab,
 } from "../../stores/ptyStore";
+import { useT } from "../../i18n";
 
 /**
  * Renders a tab's pane tree. The tree is flattened into percentage rects and
@@ -79,6 +80,7 @@ export default function PaneTree({
   tab: PtyTab;
   tabActive: boolean;
 }) {
+  const t = useT();
   const setActivePane = usePtyStore((s) => s.setActivePane);
   const setSplitRatio = usePtyStore((s) => s.setSplitRatio);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -196,7 +198,7 @@ export default function PaneTree({
                     title={`Restore split view (${kbd("⌘⇧Z")})`}
                   >
                     <ZoomRestoreIcon />
-                    Zoomed
+                    {t("Zoomed")}
                   </button>
                 )}
               </div>
@@ -228,7 +230,7 @@ export default function PaneTree({
                       }
                 }
                 onPointerDown={(e) => startDividerDrag(e, d)}
-                title="Drag to resize"
+                title={t("Drag to resize")}
               >
                 <div
                   className={`rounded-full bg-edge transition-colors group-hover:bg-accent/70 ${

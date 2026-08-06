@@ -11,6 +11,7 @@ import {
 import { basename } from "../../lib/paths";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
+import { useT } from "../../i18n";
 
 function BranchIcon() {
   return (
@@ -40,6 +41,7 @@ function BranchIcon() {
  * dirty tree is the safety rail.
  */
 export default function WorktreeModal() {
+  const t = useT();
   const open = useUiStore((s) => s.worktreeModalOpen);
   const setOpen = useUiStore((s) => s.setWorktreeModalOpen);
   const fleetCommand = useSettingsStore((s) => s.fleetCommand);
@@ -60,7 +62,7 @@ export default function WorktreeModal() {
   const refresh = async () => {
     const cwd = cwdOf();
     if (!cwd) {
-      setRepoError("No active shell directory yet.");
+      setRepoError(t("No active shell directory yet."));
       setEntries(null);
       return;
     }
@@ -186,7 +188,7 @@ export default function WorktreeModal() {
       <div className="w-[560px] max-w-[94vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-11 px-4 border-b border-edge">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-            Worktrees
+            {t("Worktrees")}
           </span>
           {repoName && (
             <span className="font-mono text-[10px] text-faint">{repoName}</span>
@@ -211,7 +213,7 @@ export default function WorktreeModal() {
                     void create();
                   }
                 }}
-                placeholder="Task name — e.g. fix-login, 重构侧栏"
+                placeholder={t("Task name — e.g. fix-login, 重构侧栏")}
                 spellCheck={false}
                 className={field}
               />
@@ -229,11 +231,12 @@ export default function WorktreeModal() {
                     )}
                   </>
                 ) : task.trim() ? (
-                  <span>Nothing usable in that name yet.</span>
+                  <span>{t("Nothing usable in that name yet.")}</span>
                 ) : (
                   <span>
-                    Creates a sibling worktree on a new branch — agents work in
-                    parallel without touching your checkout.
+                    {t(
+                      "Creates a sibling worktree on a new branch — agents work in parallel without touching your checkout.",
+                    )}
                   </span>
                 )}
               </div>
@@ -246,7 +249,9 @@ export default function WorktreeModal() {
                       onChange={(e) => setRunAgent(e.target.checked)}
                       style={{ accentColor: "var(--color-accent)" }}
                     />
-                    run <span className="font-mono text-ink">{cmd}</span> in it
+                    {t("run ")}
+                    <span className="font-mono text-ink">{cmd}</span>
+                    {t(" in it")}
                   </label>
                 )}
                 <button
@@ -258,7 +263,7 @@ export default function WorktreeModal() {
                   onClick={() => void create()}
                   disabled={!canCreate}
                 >
-                  {busy ? "Working…" : "Create worktree"}
+                  {busy ? t("Working…") : t("Create worktree")}
                 </button>
               </div>
             </>
@@ -303,24 +308,24 @@ export default function WorktreeModal() {
                       className="h-6 px-2 rounded-md border border-edge text-[10px] text-muted hover:border-accent/40 hover:text-accent transition-colors"
                       onClick={() => openEntry(e.path)}
                     >
-                      Open
+                      {t("Open")}
                     </button>
                     {!e.is_main && e.branch && (
                       <button
                         className="h-6 px-2 rounded-md border border-edge text-[10px] text-muted hover:border-emerald-400/50 hover:text-emerald-300 transition-colors"
                         onClick={() => void mergeEntry(e)}
-                        title="Finish: merge into the main checkout, remove the worktree, delete the branch. Refuses if dirty; a conflicting merge is aborted automatically."
+                        title={t("Finish: merge into the main checkout, remove the worktree, delete the branch. Refuses if dirty; a conflicting merge is aborted automatically.")}
                       >
-                        Merge
+                        {t("Merge")}
                       </button>
                     )}
                     {!e.is_main && (
                       <button
                         className="h-6 px-2 rounded-md border border-edge text-[10px] text-muted hover:border-red-400/50 hover:text-red-300 transition-colors"
                         onClick={() => void removeEntry(e.path)}
-                        title="git worktree remove — refuses if the tree is dirty; the branch survives"
+                        title={t("git worktree remove — refuses if the tree is dirty; the branch survives")}
                       >
-                        Remove
+                        {t("Remove")}
                       </button>
                     )}
                   </span>

@@ -7,6 +7,7 @@ import { formatDuration } from "../../lib/duration";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
 import { dirtyTotal } from "../../lib/git";
+import { t, useT } from "../../i18n";
 
 function BranchIcon() {
   return (
@@ -45,13 +46,13 @@ function stateDotClass(state: DashboardRow["state"]): string {
 function stateLabel(row: DashboardRow): string {
   switch (row.state) {
     case "attention":
-      return "waiting on you";
+      return t("waiting on you");
     case "agent":
-      return "running";
+      return t("running");
     case "exited":
-      return "exited";
+      return t("exited");
     default:
-      return "idle";
+      return t("idle");
   }
 }
 
@@ -61,6 +62,7 @@ function stateLabel(row: DashboardRow): string {
  * as a native overlay. ↑↓/Enter or click to jump.
  */
 export default function AgentDashboard() {
+  const t = useT();
   const open = useUiStore((s) => s.dashboardOpen);
   const setOpen = useUiStore((s) => s.setDashboardOpen);
   const tabs = usePtyStore((s) => s.tabs);
@@ -141,11 +143,13 @@ export default function AgentDashboard() {
       <div className="w-[640px] max-w-[94vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-11 px-4 border-b border-edge">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-            Agents
+            {t("Agents")}
           </span>
           <span className="font-mono text-[10px] text-faint">
-            {rows.length} pane{rows.length === 1 ? "" : "s"} ·{" "}
-            {rows.filter((r) => r.state === "attention").length} waiting
+            {t("{panes} panes · {waiting} waiting", {
+              panes: rows.length,
+              waiting: rows.filter((r) => r.state === "attention").length,
+            })}
           </span>
           <span className="ml-auto kbd shrink-0">esc</span>
         </div>
@@ -201,7 +205,7 @@ export default function AgentDashboard() {
                     {dirtyTotal(row.gitDirty) > 0 && (
                       <span
                         className="flex items-center gap-1"
-                        title="Uncommitted changes: new / modified / deleted"
+                        title={t("Uncommitted changes: new / modified / deleted")}
                       >
                         {row.gitDirty!.added > 0 && (
                           <span className="text-emerald-300/90">
@@ -226,13 +230,13 @@ export default function AgentDashboard() {
                   {row.unread && !row.watched && (
                     <span
                       className="w-1.5 h-1.5 rounded-full bg-ink/50"
-                      title="Unseen output"
+                      title={t("Unseen output")}
                     />
                   )}
                   {age && (
                     <span
                       className="font-mono text-[10px] text-faint"
-                      title="Since last prompt to this agent"
+                      title={t("Since last prompt to this agent")}
                     >
                       {age}
                     </span>

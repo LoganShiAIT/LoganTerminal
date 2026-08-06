@@ -243,7 +243,12 @@ interface PtyStore {
   cycleTab: (dir: 1 | -1) => void;
   jumpToTab: (index: number) => void;
   /** Split the active pane of the active tab; focuses the new pane. */
-  splitPane: (dir: "row" | "col") => void;
+  /**
+   * Split the focused pane. `cwd` overrides where the new pane starts —
+   * the file tree uses it to open a split directly in a browsed folder
+   * instead of inheriting the source pane's directory.
+   */
+  splitPane: (dir: "row" | "col", cwd?: string | null) => void;
   /** Close the active pane; closing the last pane closes the tab. */
   closeActivePane: () => void;
   setActivePane: (tabId: string, paneId: string) => void;
@@ -491,13 +496,13 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       get().setActiveTab(tabs[index].id);
     },
 
-    splitPane: (dir) =>
+    splitPane: (dir, cwd) =>
       set((s) => {
         const tab = s.tabs.find((t) => t.id === s.activeTabId);
         if (!tab) return s;
         if (collectLeaves(tab.root).length >= MAX_PANES_PER_TAB) return s;
         const source = activeLeafOf(tab);
-        const newLeaf = makeLeaf(source.cwd ?? source.initialCwd);
+        const newLeaf = makeLeaf(cwd ?? source.cwd ?? source.initialCwd);
         const root = splitLeafIn(tab.root, source.id, dir, newLeaf);
         if (root === tab.root) return s;
         return {

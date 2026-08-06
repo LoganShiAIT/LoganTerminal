@@ -154,6 +154,27 @@ describe("split panes", () => {
     expect(newLeaf.initialCwd).toBe("/live");
   });
 
+  it("an explicit cwd wins over the source pane's — the file tree splits into a browsed folder", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    st().addTab("/init");
+    const tab = () => st().tabs[1];
+    st().setCwd(tab().activePaneId, "/live");
+    st().splitPane("row", "/browsed/deep");
+    const newLeaf = m.findLeaf(tab().root, tab().activePaneId)!;
+    expect(newLeaf.initialCwd).toBe("/browsed/deep");
+  });
+
+  it("falls back to the source pane's cwd when none is given", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    st().addTab("/init");
+    const tab = () => st().tabs[1];
+    st().splitPane("row", null);
+    const newLeaf = m.findLeaf(tab().root, tab().activePaneId)!;
+    expect(newLeaf.initialCwd).toBe("/init");
+  });
+
   it("caps a tab at MAX_PANES_PER_TAB leaves", async () => {
     const m = await fresh();
     const st = () => m.usePtyStore.getState();

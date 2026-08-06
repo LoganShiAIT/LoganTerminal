@@ -10,7 +10,9 @@ export type SimpleTermCmd =
   | "focus"
   | "prompt-prev"
   | "prompt-next"
-  | "select-output";
+  | "select-output"
+  /** Push the active terminal's current selection into the math store. */
+  | "send-selection";
 
 /**
  * `paste` routes text through xterm's term.paste() — newline normalization

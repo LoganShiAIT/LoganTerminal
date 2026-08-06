@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Terminal as XTerm, type IMarker } from "@xterm/xterm";
+import {
+  Terminal as XTerm,
+  type IMarker,
+  type IBufferLine,
+  type IBufferCell,
+} from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
@@ -9,6 +14,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { usePtyStore, findLeaf, collectLeaves } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useMathStore, useMathHoverStore } from "../../stores/mathStore";
+import { useUiStore } from "../../stores/uiStore";
+import { renderMath } from "../../lib/math";
+import { findRowSpans, findLastMathBlock, type MathSpan } from "../../lib/mathScan";
 import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
 import { formatDuration } from "../../lib/duration";
@@ -17,13 +26,45 @@ import { openTerminalLink } from "../../lib/openLink";
 import { basename } from "../../lib/paths";
 import type { GitStatusInfo } from "../../lib/git";
 import "@xterm/xterm/css/xterm.css";
+import { t } from "../../i18n";
 
 /** A finished command at least this long pings the OS when out of view. */
 const NOTIFY_AFTER_MS = 10_000;
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
+/** Rows of scrollback the math scan looks back over. */
+const MATH_SCAN_ROWS = 300;
+const MATH_SCAN_DEBOUNCE_MS = 400;
+/** Ceiling on live decorations — a screenful of formulas is already a lot. */
+const MAX_MATH_DECORATIONS = 80;
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
+
+/**
+ * Maps each character index of a row's text to the terminal column it starts
+ * at. `translateToString` collapses a wide (CJK) cell into one JS character
+ * while it occupies two columns, so decoration coordinates derived from
+ * string indices drift right after any Chinese text. Walking the cells is the
+ * only public way to recover the real columns. Index `length` holds the
+ * column just past the last character, so callers can measure a span's end.
+ */
+function columnMap(
+  line: IBufferLine | undefined,
+  length: number,
+  cell: IBufferCell,
+): number[] {
+  const columns: number[] = [];
+  if (!line) return columns;
+  for (let x = 0; x < line.length && columns.length <= length; x++) {
+    if (!line.getCell(x, cell)) continue;
+    if (cell.getWidth() === 0) continue; // trailing half of a wide char
+    const chars = cell.getChars() || " ";
+    for (let k = 0; k < chars.length; k++) columns.push(x);
+    if (columns.length > length) break;
+  }
+  columns.push(columns.length > 0 ? columns[columns.length - 1] + 1 : 0);
+  return columns;
+}
 
 interface TerminalProps {
   tabId: string;
@@ -69,8 +110,12 @@ export default function Terminal({
   } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const activeRef = useRef(active);
+  /** Set by the mount effect; lets other effects ask for a rescan. */
+  const scanMathRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     activeRef.current = active;
+    // Becoming the focused pane makes this terminal the auto-follow source.
+    if (active) scanMathRef.current?.();
   }, [active]);
 
   useEffect(() => {
@@ -233,8 +278,13 @@ export default function Terminal({
           const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
           const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
           notify(
-            code === 0 ? "Command finished" : `Command failed (exit ${code})`,
-            `${formatDuration(durationMs)} in ${where}`,
+            code === 0
+              ? t("Command finished")
+              : t("Command failed (exit {code})", { code }),
+            t("{duration} in {where}", {
+              duration: formatDuration(durationMs),
+              where,
+            }),
           );
         }
       }
@@ -246,7 +296,118 @@ export default function Terminal({
       setAtBottom(buf.viewportY >= buf.baseY);
     };
     const scrollDisposable = term.onScroll(updateAtBottom);
-    const writeDisposable = term.onWriteParsed(updateAtBottom);
+
+    // --- Math awareness -------------------------------------------------
+    // One debounced scan of the tail of the buffer feeds both features:
+    // auto-follow (push the newest formula into the Math panel) and the
+    // inline underline + hover preview. Decorations are the only supported
+    // way to put our own DOM over the grid — xterm itself renders text only.
+    let mathScanTimer: number | null = null;
+    let mathDisposables: Array<{ dispose: () => void }> = [];
+
+    const clearMathDecorations = () => {
+      for (const d of mathDisposables) d.dispose();
+      mathDisposables = [];
+    };
+
+    const decorateSpan = (el: HTMLElement, span: MathSpan) => {
+      // classList.add, never className: xterm's own `xterm-decoration` class
+      // carries the absolute positioning that puts this element over the grid.
+      el.classList.add("math-underline");
+      // Property assignment (not addEventListener): onRender fires again on
+      // every re-render and must not stack handlers.
+      el.onmouseenter = () => {
+        const rect = el.getBoundingClientRect();
+        useMathHoverStore.getState().show({
+          html: renderMath(span.value, span.display),
+          anchor: {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          },
+        });
+      };
+      el.onmouseleave = () => useMathHoverStore.getState().hide();
+      el.onclick = () => {
+        useMathHoverStore.getState().hide();
+        useMathStore
+          .getState()
+          .setSource(span.display ? `$$${span.value}$$` : `$${span.value}$`, "selection");
+        const ui = useUiStore.getState();
+        ui.setRightPanelTab("math");
+        if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
+      };
+    };
+
+    const scanMath = () => {
+      const settings = useSettingsStore.getState();
+      if (!settings.mathInline && !settings.mathAutoFollow) {
+        clearMathDecorations();
+        return;
+      }
+      const buf = term.buffer.active;
+      const bottom = buf.baseY + term.rows;
+      const top = Math.max(0, bottom - MATH_SCAN_ROWS);
+      const rows: string[] = [];
+      for (let y = top; y < bottom; y++) {
+        rows.push(buf.getLine(y)?.translateToString(true) ?? "");
+      }
+
+      // Only the pane you are actually watching may hijack the panel.
+      if (settings.mathAutoFollow && activeRef.current) {
+        const block = findLastMathBlock(rows);
+        if (block) useMathStore.getState().autoFollow(block);
+      }
+
+      clearMathDecorations();
+      if (!settings.mathInline) return;
+
+      const cursorLine = buf.baseY + buf.cursorY;
+      const nullCell = buf.getNullCell();
+      let placed = 0;
+      for (let i = 0; i < rows.length && placed < MAX_MATH_DECORATIONS; i++) {
+        const spans = findRowSpans(rows[i]);
+        if (spans.length === 0) continue;
+        // String index ≠ terminal column once CJK is on the line (one char,
+        // two cells), so map through the actual cells before positioning.
+        const columns = columnMap(buf.getLine(top + i), rows[i].length, nullCell);
+        for (const span of spans) {
+          if (placed >= MAX_MATH_DECORATIONS) break;
+          const marker = term.registerMarker(top + i - cursorLine);
+          if (!marker) continue;
+          const x = columns[span.start] ?? span.start;
+          const endX = columns[span.end] ?? (columns[columns.length - 1] ?? span.end) + 1;
+          const decoration = term.registerDecoration({
+            marker,
+            x,
+            width: Math.max(1, endX - x),
+            height: 1,
+            layer: "top",
+          });
+          if (!decoration) {
+            marker.dispose();
+            continue;
+          }
+          decoration.onRender((el) => decorateSpan(el, span));
+          mathDisposables.push(decoration, marker);
+          placed++;
+        }
+      }
+    };
+
+    const scheduleMathScan = () => {
+      if (mathScanTimer !== null) window.clearTimeout(mathScanTimer);
+      mathScanTimer = window.setTimeout(scanMath, MATH_SCAN_DEBOUNCE_MS);
+    };
+    scanMathRef.current = scheduleMathScan;
+
+    const writeDisposable = term.onWriteParsed(() => {
+      updateAtBottom();
+      scheduleMathScan();
+    });
+    // A reflow re-wraps every row, so all column positions are stale.
+    const resizeMathDisposable = term.onResize(scheduleMathScan);
 
     // BEL: agent CLIs ring it when they need input. Marks the pane dot
     // (store no-ops when this pane is being watched) and pings the OS when
@@ -268,9 +429,9 @@ export default function Terminal({
       const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
       notify(
         leaf?.agentName
-          ? `${leaf.agentName} needs attention`
-          : "Terminal bell",
-        `in ${where}`,
+          ? t("{name} needs attention", { name: leaf.agentName })
+          : t("Terminal bell"),
+        t("in {where}", { where }),
       );
     });
 
@@ -309,7 +470,7 @@ export default function Terminal({
             usePtyStore.getState().markUnread(tabId, paneId);
           });
           unlistenExit = await listen(`pty://exit/${id}`, () => {
-            term.writeln("\r\n\x1b[31m[process exited]\x1b[0m");
+            term.writeln(`\r\n\x1b[31m${t("[process exited]")}\x1b[0m`);
             exited = true;
             const store = usePtyStore.getState();
             store.markPaneExited(paneId);
@@ -439,6 +600,14 @@ export default function Terminal({
       if (s.cursorBlink !== prev.cursorBlink) {
         term.options.cursorBlink = s.cursorBlink;
       }
+      if (s.mathInline !== prev.mathInline || s.mathAutoFollow !== prev.mathAutoFollow) {
+        // Turning either off must take effect now, not at the next write.
+        if (!s.mathInline) {
+          clearMathDecorations();
+          useMathHoverStore.getState().hide();
+        }
+        scheduleMathScan();
+      }
     });
 
     // Chrome UI (command palette, header buttons) drives the active terminal
@@ -474,6 +643,20 @@ export default function Terminal({
         case "select-output":
           selectLastOutput();
           break;
+        case "send-selection": {
+          // Prefer what the user highlighted; with nothing selected, fall
+          // back to the last command's output (the formula an agent just
+          // printed is almost always exactly that).
+          let text = term.getSelection();
+          let origin: "selection" | "output" = "selection";
+          if (!text.trim()) {
+            selectLastOutput();
+            text = term.getSelection();
+            origin = "output";
+          }
+          if (text.trim()) useMathStore.getState().setSource(text, origin);
+          break;
+        }
       }
     });
 
@@ -531,8 +714,13 @@ export default function Terminal({
         invoke("pty_kill", { sessionId });
       }
       searchResults.dispose();
+      if (mathScanTimer !== null) window.clearTimeout(mathScanTimer);
+      clearMathDecorations();
+      useMathHoverStore.getState().hide();
+      scanMathRef.current = null;
       scrollDisposable.dispose();
       writeDisposable.dispose();
+      resizeMathDisposable.dispose();
       bellDisposable.dispose();
       titleDisposable.dispose();
       oscHandler.dispose();
@@ -590,7 +778,7 @@ export default function Terminal({
             ref={searchInputRef}
             type="text"
             spellCheck={false}
-            placeholder="find"
+            placeholder={t("find")}
             className="w-40 bg-transparent font-mono text-xs text-ink placeholder:text-faint focus:outline-none"
             onChange={(e) => {
               const q = e.target.value;
@@ -627,21 +815,21 @@ export default function Terminal({
           <button
             className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
             onClick={findPrev}
-            title="Previous match (⇧↩)"
+            title={t("Previous match (⇧↩)")}
           >
             <ChevronIcon dir="up" />
           </button>
           <button
             className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
             onClick={findNext}
-            title="Next match (↩)"
+            title={t("Next match (↩)")}
           >
             <ChevronIcon dir="down" />
           </button>
           <button
             className="w-6 h-6 grid place-items-center rounded-md text-[13px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
             onClick={closeSearch}
-            title="Close (esc)"
+            title={t("Close (esc)")}
           >
             ×
           </button>
@@ -655,7 +843,7 @@ export default function Terminal({
             termRef.current?.scrollToBottom();
             termRef.current?.focus();
           }}
-          title="Scroll to bottom"
+          title={t("Scroll to bottom")}
         >
           <ChevronIcon dir="down" />
         </button>

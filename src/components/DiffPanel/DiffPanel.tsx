@@ -11,6 +11,7 @@ import {
   type DiffSummary,
 } from "../../lib/git";
 import { basename } from "../../lib/paths";
+import { useT } from "../../i18n";
 
 const LINE_CLASS: Record<DiffLineKind, string> = {
   add: "text-emerald-300 bg-emerald-500/[0.07]",
@@ -39,10 +40,11 @@ function RefreshIcon() {
 }
 
 function Patch({ text }: { text: string }) {
+  const t = useT();
   if (!text.trim()) {
     return (
       <div className="px-3 py-2 text-[10px] text-faint">
-        No textual changes (empty or binary file).
+        {t("No textual changes (empty or binary file).")}
       </div>
     );
   }
@@ -69,6 +71,7 @@ function Patch({ text }: { text: string }) {
  * sidebar is hidden.
  */
 export default function DiffPanel() {
+  const t = useT();
   const pane = useActivePane();
   const sidebarOpen = useUiStore((s) => s.rightSidebarOpen);
   const cwd = pane?.cwd ?? pane?.initialCwd ?? null;
@@ -187,15 +190,15 @@ export default function DiffPanel() {
       <div className="shrink-0 space-y-2 border-b border-edge p-2">
         <div className="flex h-7 items-center gap-1 rounded-lg bg-ink/[0.05] p-0.5">
           <button className={segBtn(mode === "working")} onClick={() => setMode("working")}>
-            Changes
+            {t("Changes")}
           </button>
           <button className={segBtn(mode === "branch")} onClick={() => setMode("branch")}>
-            vs {summary?.base ?? "main"}
+            {t("vs {base}", { base: summary?.base ?? "main" })}
           </button>
           <button
             className="grid h-full w-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:text-accent"
             onClick={() => void load()}
-            title="Refresh (also refreshes on every prompt)"
+            title={t("Refresh (also refreshes on every prompt)")}
           >
             <RefreshIcon />
           </button>
@@ -217,7 +220,7 @@ export default function DiffPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {!cwd ? (
           <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[11px] leading-relaxed text-faint">
-            No active shell directory yet.
+            {t("No active shell directory yet.")}
           </div>
         ) : error ? (
           <div className="rounded-lg border border-dashed border-edge px-3 py-3 font-mono text-[10px] leading-relaxed text-faint whitespace-pre-wrap break-all">
@@ -226,8 +229,10 @@ export default function DiffPanel() {
         ) : !summary ? null : summary.files.length === 0 ? (
           <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[11px] leading-relaxed text-faint">
             {mode === "working"
-              ? "Working tree clean — nothing uncommitted."
-              : `No commits beyond ${summary.base ?? "the base branch"}.`}
+              ? t("Working tree clean — nothing uncommitted.")
+              : t("No commits beyond {base}.", {
+                  base: summary.base ?? t("the base branch"),
+                })}
           </div>
         ) : (
           <div className="space-y-1">

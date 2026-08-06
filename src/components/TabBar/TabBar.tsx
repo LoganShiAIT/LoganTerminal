@@ -2,9 +2,10 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { usePtyStore, collectLeaves, activeLeafOf } from "../../stores/ptyStore";
 import { basename } from "../../lib/paths";
 import { kbd } from "../../lib/keys";
+import { t, useT } from "../../i18n";
 
 function tabLabel(cwd: string | null): string {
-  if (!cwd) return "shell";
+  if (!cwd) return t("shell");
   return basename(cwd) || "/";
 }
 
@@ -20,6 +21,7 @@ interface DragState {
 }
 
 export default function TabBar() {
+  const t = useT();
   const tabs = usePtyStore((s) => s.tabs);
   const activeTabId = usePtyStore((s) => s.activeTabId);
   const setActiveTab = usePtyStore((s) => s.setActiveTab);
@@ -206,7 +208,7 @@ export default function TabBar() {
             }}
             title={
               allExited
-                ? `${labelCwd ?? "shell"} — exited`
+                ? t("{path} — exited", { path: labelCwd ?? t("shell") })
                 : (labelCwd ?? undefined)
             }
             style={
@@ -232,13 +234,15 @@ export default function TabBar() {
             {hasAgent && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-accent shrink-0 animate-[dot-glow_1.8s_ease-in-out_infinite]"
-                title={`agent: ${leaves.find((l) => l.agentName)?.agentName}`}
+                title={t("agent: {name}", {
+                  name: leaves.find((l) => l.agentName)?.agentName ?? "",
+                })}
               />
             )}
             {tab.unread && !isActive && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-ink/75 shrink-0"
-                title="New output"
+                title={t("New output")}
               />
             )}
             <span
@@ -249,7 +253,7 @@ export default function TabBar() {
             {leaves.length > 1 && (
               <span
                 className="text-[9px] font-mono text-faint shrink-0"
-                title={`${leaves.length} panes`}
+                title={t("{n} panes", { n: leaves.length })}
               >
                 ◫{leaves.length}
               </span>
@@ -266,7 +270,7 @@ export default function TabBar() {
                   e.stopPropagation();
                   closeTab(tab.id);
                 }}
-                title="Close tab (all panes)"
+                title={t("Close tab (all panes)")}
               >
                 ×
               </button>
@@ -283,7 +287,7 @@ export default function TabBar() {
       <button
         className="w-7 h-7 grid place-items-center rounded-lg text-base leading-none text-muted hover:text-accent hover:bg-accent/[0.08] hover:rotate-90 transition-[color,background-color,transform] duration-200 shrink-0"
         onClick={handleNewTab}
-        title={`New terminal (${kbd("⌘T")})`}
+        title={t("New terminal ({key})", { key: kbd("⌘T") })}
       >
         +
       </button>

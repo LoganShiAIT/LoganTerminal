@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type RightPanelTab = "assets" | "review" | "diff";
+type RightPanelTab = "assets" | "review" | "diff" | "math";
 
 interface UiStore {
   leftSidebarOpen: boolean;
@@ -14,6 +14,14 @@ interface UiStore {
   dashboardOpen: boolean;
   /** Worktree modal (⌘⇧N) visibility — UI state, not persisted. */
   worktreeModalOpen: boolean;
+  /** File/folder finder (⌘⇧F) visibility — UI state, not persisted. */
+  fileSearchOpen: boolean;
+  /**
+   * Pending "show this path in the file tree" request. The counter is what
+   * FileTree keys its effect on, so revealing the same path twice in a row
+   * still re-fires (and re-plays the highlight).
+   */
+  reveal: { path: string; isDir: boolean; seq: number } | null;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
   setLeftSidebarWidth: (width: number) => void;
@@ -22,6 +30,8 @@ interface UiStore {
   setPaletteOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setWorktreeModalOpen: (open: boolean) => void;
+  setFileSearchOpen: (open: boolean) => void;
+  revealInFileTree: (path: string, isDir: boolean) => void;
 }
 
 const UI_KEY = "logan.uiLayout";
@@ -39,10 +49,11 @@ function loadLayout() {
     const raw = localStorage.getItem(UI_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    const rightPanelTab: RightPanelTab =
-      parsed.rightPanelTab === "review" || parsed.rightPanelTab === "diff"
-        ? parsed.rightPanelTab
-        : "assets";
+    const rightPanelTab: RightPanelTab = ["review", "diff", "math"].includes(
+      parsed.rightPanelTab,
+    )
+      ? parsed.rightPanelTab
+      : "assets";
     return {
       leftSidebarOpen:
         typeof parsed.leftSidebarOpen === "boolean"
@@ -99,6 +110,8 @@ export const useUiStore = create<UiStore>((set) => ({
   paletteOpen: false,
   dashboardOpen: false,
   worktreeModalOpen: false,
+  fileSearchOpen: false,
+  reveal: null,
   toggleLeftSidebar: () =>
     set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
   toggleRightSidebar: () =>
@@ -115,6 +128,13 @@ export const useUiStore = create<UiStore>((set) => ({
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   setDashboardOpen: (dashboardOpen) => set({ dashboardOpen }),
   setWorktreeModalOpen: (worktreeModalOpen) => set({ worktreeModalOpen }),
+  setFileSearchOpen: (fileSearchOpen) => set({ fileSearchOpen }),
+  revealInFileTree: (path, isDir) =>
+    set((s) => ({
+      // Revealing is pointless against a collapsed sidebar — open it.
+      leftSidebarOpen: true,
+      reveal: { path, isDir, seq: (s.reveal?.seq ?? 0) + 1 },
+    })),
 }));
 
 useUiStore.subscribe(saveLayout);

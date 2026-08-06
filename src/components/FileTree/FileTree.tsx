@@ -1,10 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useActivePane } from "../../stores/ptyStore";
+import { useActivePane, usePtyStore } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useUiStore } from "../../stores/uiStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { homeDir, tildify, joinPath, parentOf } from "../../lib/paths";
 import { attachReviewPaths } from "../../lib/reviewAttachments";
+import { sendTermCmd } from "../../lib/termBus";
+import { revealTarget } from "../../lib/reveal";
+import { kbd } from "../../lib/keys";
+import { useT } from "../../i18n";
 
 interface FsEntry {
   name: string;
@@ -65,6 +70,60 @@ function EyeIcon({ off }: { off: boolean }) {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
+      <circle cx="7" cy="7" r="4.3" />
+      <path d="m10.3 10.3 3.2 3.2" />
+    </svg>
+  );
+}
+
+function TerminalPlusIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 3.5h9a1 1 0 0 1 1 1v6" />
+      <path d="M4.6 6.2 6.4 8l-1.8 1.8M7.6 10.2h2.2" />
+      <path d="M2 3.5v8a1 1 0 0 0 1 1h4.2" />
+      <path d="M11.6 11v4M9.6 13h4" />
+    </svg>
+  );
+}
+
+function SplitIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M8 3v10" />
+    </svg>
+  );
+}
+
 function RefreshIcon() {
   return (
     <svg
@@ -84,13 +143,19 @@ function RefreshIcon() {
 }
 
 export default function FileTree() {
+  const t = useT();
   const [cwd, setCwd] = useState<string>("");
   const [home, setHome] = useState<string | null>(null);
   const [entries, setEntries] = useState<FsEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [highlight, setHighlight] = useState<string | null>(null);
   const showHidden = useSettingsStore((s) => s.showHiddenFiles);
   const toggleHidden = useSettingsStore((s) => s.toggleHiddenFiles);
+  const setFileSearchOpen = useUiStore((s) => s.setFileSearchOpen);
+  const reveal = useUiStore((s) => s.reveal);
+  const revealSeq = reveal?.seq ?? 0;
+  const highlightRowRef = useRef<HTMLLIElement | null>(null);
   const activePane = useActivePane();
   const activePaneId = activePane?.id ?? null;
   const activeSessionId = activePane?.sessionId ?? null;
@@ -122,6 +187,26 @@ export default function FileTree() {
       });
   }, [cwd, showHidden, refreshTick]);
 
+  // Reveal request from the finder (⌘⇧F): jump to the entry's folder and
+  // flash its row. Keyed on the counter, not the path, so revealing the same
+  // entry twice in a row replays the highlight.
+  useEffect(() => {
+    const request = useUiStore.getState().reveal;
+    if (!request) return;
+    const { dir, highlight: name } = revealTarget(request.path, request.isDir);
+    setCwd(dir);
+    setHighlight(name);
+    if (!name) return;
+    const timer = window.setTimeout(() => setHighlight(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [revealSeq]);
+
+  useEffect(() => {
+    if (highlight) {
+      highlightRowRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlight, entries]);
+
   const insertPath = useCallback(
     async (path: string) => {
       if (!activeSessionId) return;
@@ -134,6 +219,17 @@ export default function FileTree() {
     [activeSessionId],
   );
 
+  /** Open a terminal rooted at a folder the tree is showing. */
+  const openTabAt = useCallback((path: string) => {
+    usePtyStore.getState().addTab(path);
+    requestAnimationFrame(() => sendTermCmd("focus"));
+  }, []);
+
+  const splitAt = useCallback((path: string) => {
+    usePtyStore.getState().splitPane("row", path);
+    requestAnimationFrame(() => sendTermCmd("focus"));
+  }, []);
+
   const atRoot = !cwd || parentOf(cwd) === cwd;
 
   return (
@@ -141,9 +237,24 @@ export default function FileTree() {
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
         <div className="flex items-center justify-between">
           <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
-            Files
+            {t("Files")}
           </div>
           <div className="flex items-center gap-0.5 -mr-1">
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-faint hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40"
+              disabled={!cwd}
+              onClick={() => cwd && openTabAt(cwd)}
+              title={t("New terminal here — {path}", { path: tildify(cwd, home) })}
+            >
+              <TerminalPlusIcon />
+            </button>
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-faint hover:text-accent hover:bg-accent/10 transition-colors"
+              onClick={() => setFileSearchOpen(true)}
+              title={t("Find file or folder ({key})", { key: kbd("⌘⇧F") })}
+            >
+              <SearchIcon />
+            </button>
             <button
               className={`w-6 h-6 grid place-items-center rounded-md transition-colors ${
                 showHidden
@@ -151,14 +262,14 @@ export default function FileTree() {
                   : "text-faint hover:text-muted hover:bg-ink/5"
               }`}
               onClick={toggleHidden}
-              title={showHidden ? "Hide dotfiles" : "Show dotfiles"}
+              title={showHidden ? t("Hide dotfiles") : t("Show dotfiles")}
             >
               <EyeIcon off={!showHidden} />
             </button>
             <button
               className="w-6 h-6 grid place-items-center rounded-md text-faint hover:text-muted hover:bg-ink/5 transition-colors"
               onClick={() => setRefreshTick((n) => n + 1)}
-              title="Refresh"
+              title={t("Refresh")}
             >
               <RefreshIcon />
             </button>
@@ -166,7 +277,7 @@ export default function FileTree() {
         </div>
         <div
           className="font-mono text-[11px] text-muted mt-1 truncate cursor-pointer hover:text-accent transition-colors"
-          title={cwd ? `${cwd} — click to insert` : undefined}
+          title={cwd ? t("{path} — click to insert", { path: cwd }) : undefined}
           onClick={() => insertPath(cwd)}
         >
           {cwd ? tildify(cwd, home) : "…"}
@@ -189,16 +300,24 @@ export default function FileTree() {
         {entries.map((e, i) => {
           const full = joinPath(cwd, e.name);
           const hidden = e.name.startsWith(".");
+          const revealed = highlight === e.name;
           return (
             <li
               key={full}
+              ref={revealed ? highlightRowRef : undefined}
               style={{ animationDelay: `${Math.min(i * 12, 200)}ms` }}
-              className="group mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100 animate-[card-in_0.18s_ease-out_both]"
+              className={`group mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer text-[12.5px] hover:bg-accent/[0.07] transition-colors duration-100 animate-[card-in_0.18s_ease-out_both] ${
+                revealed ? "bg-accent/15 ring-1 ring-accent/50" : ""
+              }`}
               onClick={() => {
                 if (e.is_dir) setCwd(full);
                 else insertPath(full);
               }}
-              title={e.is_dir ? `${e.name} — open` : `${e.name} — insert path`}
+              title={
+                e.is_dir
+                  ? t("{name} — open", { name: e.name })
+                  : t("{name} — insert path", { name: e.name })
+              }
               >
                 {e.is_dir ? <FolderIcon /> : <FileIcon />}
                 <span
@@ -214,9 +333,33 @@ export default function FileTree() {
               >
                 {e.name}
               </span>
+              {e.is_dir && (
+                <>
+                  <button
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded text-faint opacity-0 transition-colors hover:bg-ink/10 hover:text-accent group-hover:opacity-100"
+                    title={t("New terminal in {name}", { name: e.name })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openTabAt(full);
+                    }}
+                  >
+                    <TerminalPlusIcon />
+                  </button>
+                  <button
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded text-faint opacity-0 transition-colors hover:bg-ink/10 hover:text-accent group-hover:opacity-100"
+                    title={t("Split the focused pane, starting in {name}", { name: e.name })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      splitAt(full);
+                    }}
+                  >
+                    <SplitIcon />
+                  </button>
+                </>
+              )}
               <button
                 className="h-5 w-5 shrink-0 rounded text-faint opacity-0 transition-colors hover:bg-ink/10 hover:text-accent group-hover:opacity-100"
-                title="Attach to review"
+                title={t("Attach to review")}
                 onClick={(event) => {
                   event.stopPropagation();
                   attachReviewPaths([full]).catch((err) =>

@@ -103,6 +103,7 @@ pub fn run() {
             git::git_worktree_remove,
             git::git_worktree_merge,
             fs::fs_list_dir,
+            fs::fs_search,
             fs::fs_stat_path,
             fs::fs_read_text_file,
             fs::fs_write_text_file,

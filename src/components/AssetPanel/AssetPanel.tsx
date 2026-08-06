@@ -15,6 +15,7 @@ import { useActivePane } from "../../stores/ptyStore";
 import { shellEscapePath } from "../../lib/shellEscape";
 import { sendTermCmd } from "../../lib/termBus";
 import { basename } from "../../lib/paths";
+import { useT } from "../../i18n";
 
 interface LightboxData {
   /** Full-resolution source (asset-protocol URL when a file path exists). */
@@ -35,6 +36,7 @@ function timeAgo(ts: number): string {
 }
 
 export default function AssetPanel() {
+  const t = useT();
   const clipItems = useClipboardStore((s) => s.items);
   const setClip = useClipboardStore((s) => s.setItems);
   const prependClip = useClipboardStore((s) => s.prepend);
@@ -119,18 +121,21 @@ export default function AssetPanel() {
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
         <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
-          Assets
+          {t("Assets")}
         </div>
         <div className="font-mono text-[11px] text-muted mt-1 truncate">
           {isEmpty
-            ? "copy or screenshot to collect"
-            : `${clipItems.length} clipboard · ${shots.length} shot${shots.length === 1 ? "" : "s"}`}
+            ? t("copy or screenshot to collect")
+            : t("{clips} clipboard · {shots} shots", {
+                clips: clipItems.length,
+                shots: shots.length,
+              })}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <Section label="Clipboard" count={clipItems.length}>
+        <Section label={t("Clipboard")} count={clipItems.length}>
           {clipItems.length === 0 ? (
-            <Placeholder text="Copy text or an image to see it here." />
+            <Placeholder text={t("Copy text or an image to see it here.")} />
           ) : (
             clipItems.map((item, i) => (
               <AssetCard
@@ -177,9 +182,9 @@ export default function AssetPanel() {
           )}
         </Section>
 
-        <Section label="Screenshots" count={shots.length}>
+        <Section label={t("Screenshots")} count={shots.length}>
           {shots.length === 0 ? (
-            <Placeholder text="Take a screenshot to have it appear here." />
+            <Placeholder text={t("Take a screenshot to have it appear here.")} />
           ) : (
             shots.map((item, i) => (
               <AssetCard
@@ -244,6 +249,7 @@ function Lightbox({
   onInsert: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [src, setSrc] = useState(data.src);
 
   // Capture-phase Esc so it wins over the focused xterm textarea.
@@ -291,7 +297,7 @@ function Lightbox({
           </span>
         )}
         <button className={btn} disabled={!canInsert} onClick={onInsert}>
-          Insert Path
+          {t("Insert Path")}
         </button>
         <button
           className={btn}
@@ -300,17 +306,17 @@ function Lightbox({
             data.path && navigator.clipboard.writeText(data.path)
           }
         >
-          Copy Path
+          {t("Copy Path")}
         </button>
         <button
           className={btn}
           disabled={!data.path}
           onClick={() => data.path && openPath(data.path)}
         >
-          Open
+          {t("Open")}
         </button>
         <button className={btn} onClick={onClose}>
-          Close
+          {t("Close")}
         </button>
       </div>
     </div>,
@@ -374,12 +380,13 @@ function AssetCard({
   footer,
   children,
 }: AssetCardProps) {
+  const t = useT();
   return (
     <div
       className="group relative rounded-lg border border-edge bg-ink/[0.04] overflow-hidden cursor-pointer transition-[border-color,box-shadow,transform] duration-150 hover:border-accent/50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)] hover:-translate-y-0.5 animate-[card-in_0.25s_ease-out_both]"
       style={{ animationDelay: `${Math.min(index * 40, 240)}ms` }}
       onClick={onClick}
-      title="Click to insert into terminal"
+      title={t("Click to insert into terminal")}
     >
       {children}
       <button
@@ -388,7 +395,7 @@ function AssetCard({
           e.stopPropagation();
           onRemove();
         }}
-        title="Remove"
+        title={t("Remove")}
       >
         ×
       </button>
@@ -399,7 +406,7 @@ function AssetCard({
             e.stopPropagation();
             onZoom();
           }}
-          title="Preview full size"
+          title={t("Preview full size")}
         >
           <svg
             width="11"
@@ -422,7 +429,7 @@ function AssetCard({
             e.stopPropagation();
             onFileInsert();
           }}
-          title="Insert as file path (writes a temp file, capped history)"
+          title={t("Insert as file path (writes a temp file, capped history)")}
         >
           <svg
             width="11"
