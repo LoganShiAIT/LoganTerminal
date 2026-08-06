@@ -47,3 +47,41 @@ describe("revealInFileTree", () => {
     expect(store.getState().reveal).toMatchObject({ isDir: true });
   });
 });
+
+describe("right panel", () => {
+  it("openRightPanel shows the tab and opens a collapsed sidebar", async () => {
+    localStorage.setItem(
+      "logan.uiLayout",
+      JSON.stringify({ rightSidebarOpen: false, rightPanelTab: "assets" }),
+    );
+    const store = await freshStore();
+
+    store.getState().openRightPanel("diff");
+    expect(store.getState().rightPanelTab).toBe("diff");
+    expect(store.getState().rightSidebarOpen).toBe(true);
+
+    // Already open on another tab: switch tabs, stay open.
+    store.getState().openRightPanel("math");
+    expect(store.getState().rightPanelTab).toBe("math");
+    expect(store.getState().rightSidebarOpen).toBe(true);
+  });
+
+  it("toggleRightPanel only hides when that tab is already the visible one", async () => {
+    const store = await freshStore();
+
+    store.getState().openRightPanel("assets");
+    // Different tab → switch to it rather than closing.
+    store.getState().toggleRightPanel("diff");
+    expect(store.getState().rightPanelTab).toBe("diff");
+    expect(store.getState().rightSidebarOpen).toBe(true);
+
+    // Same tab, visible → collapse.
+    store.getState().toggleRightPanel("diff");
+    expect(store.getState().rightSidebarOpen).toBe(false);
+    expect(store.getState().rightPanelTab).toBe("diff");
+
+    // Same tab, hidden → bring it back.
+    store.getState().toggleRightPanel("diff");
+    expect(store.getState().rightSidebarOpen).toBe(true);
+  });
+});

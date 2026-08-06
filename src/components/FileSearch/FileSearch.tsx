@@ -9,6 +9,7 @@ import { attachReviewPaths } from "../../lib/reviewAttachments";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 
 export interface SearchHit {
   path: string;
@@ -75,19 +76,12 @@ export default function FileSearch() {
     setSelected(0);
     setError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
+  }, [open, home]);
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        // Capture phase: the focused xterm textarea would otherwise eat it.
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-        sendTermCmd("focus");
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, home, setOpen]);
+  useEscapeClose(open, () => {
+    setOpen(false);
+    sendTermCmd("focus");
+  });
 
   // Debounced, stateless re-walk per query. The seq guard drops responses
   // that come back after a newer request was already fired.

@@ -3,6 +3,7 @@ import { usePtyStore } from "../../stores/ptyStore";
 import { useUiStore } from "../../stores/uiStore";
 import { dashboardRows, type DashboardRow } from "../../lib/dashboard";
 import { basename } from "../../lib/paths";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 import { formatDuration } from "../../lib/duration";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
@@ -100,17 +101,16 @@ export default function AgentDashboard() {
     selectedRef.current?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  useEscapeClose(open, () => {
+    setOpen(false);
+    sendTermCmd("focus");
+  });
+
   useEffect(() => {
     if (!open) return;
-    // Capture phase so the focused xterm textarea never sees these keys
-    // (same pattern as the settings panel's Esc handling).
+    // Capture phase so the focused xterm textarea never sees these keys.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-        sendTermCmd("focus");
-      } else if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelected((s) => (s + 1) % Math.max(rows.length, 1));
       } else if (e.key === "ArrowUp") {

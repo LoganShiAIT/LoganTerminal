@@ -31,6 +31,14 @@ export function basename(path: string): string {
   return segments[segments.length - 1] ?? path;
 }
 
+/**
+ * Short human label for a directory: its last segment, or "/" at the
+ * filesystem root (where there is no segment left to show).
+ */
+export function dirLabel(path: string): string {
+  return basename(path) || "/";
+}
+
 export function joinPath(base: string, name: string): string {
   const sep = sepOf(base);
   return base.endsWith(sep) ? base + name : base + sep + name;

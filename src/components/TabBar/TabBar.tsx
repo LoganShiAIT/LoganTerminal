@@ -1,12 +1,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { usePtyStore, collectLeaves, activeLeafOf } from "../../stores/ptyStore";
-import { basename } from "../../lib/paths";
+import { dirLabel } from "../../lib/paths";
 import { kbd } from "../../lib/keys";
 import { t, useT } from "../../i18n";
 
 function tabLabel(cwd: string | null): string {
   if (!cwd) return t("shell");
-  return basename(cwd) || "/";
+  return dirLabel(cwd);
 }
 
 const DRAG_THRESHOLD_PX = 5;

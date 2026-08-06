@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { GitDirty } from "../lib/git";
+import { dirLabel } from "../lib/paths";
 
 /** A terminal pane holding one PTY session. */
 export interface LeafPane {
@@ -705,6 +706,17 @@ export function useActivePane(): LeafPane | undefined {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
     return tab ? activeLeafOf(tab) : undefined;
   });
+}
+
+/**
+ * Short "where did this happen" label for a pane — its directory's last
+ * segment, or "shell" before the first OSC 7 lands. Used by notification
+ * bodies, which have no room for a full path.
+ */
+export function paneWhere(tabId: string, paneId: string): string {
+  const tab = usePtyStore.getState().tabs.find((t) => t.id === tabId);
+  const cwd = tab ? findLeaf(tab.root, paneId)?.cwd : null;
+  return cwd ? dirLabel(cwd) : "shell";
 }
 
 /** Non-hook accessor for event handlers. */

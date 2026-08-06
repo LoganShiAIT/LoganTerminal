@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type RightPanelTab = "assets" | "review" | "diff" | "math";
+export type RightPanelTab = "assets" | "review" | "diff" | "math";
 
 interface UiStore {
   leftSidebarOpen: boolean;
@@ -27,6 +27,13 @@ interface UiStore {
   setLeftSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   setRightPanelTab: (tab: RightPanelTab) => void;
+  /** Show `tab` in the right sidebar, opening the sidebar if it is closed. */
+  openRightPanel: (tab: RightPanelTab) => void;
+  /**
+   * True toggle for review-glance workflows: hide the sidebar when `tab` is
+   * already the visible one, otherwise behave like [`openRightPanel`].
+   */
+  toggleRightPanel: (tab: RightPanelTab) => void;
   setPaletteOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setWorktreeModalOpen: (open: boolean) => void;
@@ -125,6 +132,14 @@ export const useUiStore = create<UiStore>((set) => ({
       rightSidebarWidth: clamp(width, RIGHT_SIDEBAR_MIN, RIGHT_SIDEBAR_MAX),
     }),
   setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
+  openRightPanel: (rightPanelTab) =>
+    set({ rightPanelTab, rightSidebarOpen: true }),
+  toggleRightPanel: (rightPanelTab) =>
+    set((s) =>
+      s.rightSidebarOpen && s.rightPanelTab === rightPanelTab
+        ? { rightSidebarOpen: false }
+        : { rightPanelTab, rightSidebarOpen: true },
+    ),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   setDashboardOpen: (dashboardOpen) => set({ dashboardOpen }),
   setWorktreeModalOpen: (worktreeModalOpen) => set({ worktreeModalOpen }),

@@ -12,6 +12,7 @@ import { basename } from "../../lib/paths";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 
 function BranchIcon() {
   return (
@@ -86,20 +87,10 @@ export default function WorktreeModal() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    // Capture phase so the focused xterm textarea never sees Esc.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-        sendTermCmd("focus");
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, setOpen]);
+  useEscapeClose(open, () => {
+    setOpen(false);
+    sendTermCmd("focus");
+  });
 
   if (!open) return null;
 

@@ -270,7 +270,13 @@ pub fn git_worktree_remove(cwd: String, path: String) -> Result<(), String> {
 // every path-emitting call so non-ASCII paths (中文 filenames) come out as
 // raw UTF-8 instead of octal escapes.
 
-const QUOTEPATH: [&str; 2] = ["-c", "core.quotepath=false"];
+/// `core.quotepath=false` on every path-emitting call, so non-ASCII paths
+/// come out as raw UTF-8 instead of octal escapes.
+fn quotepath_args<'a>(rest: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let mut args = vec!["-c", "core.quotepath=false"];
+    args.extend(rest);
+    args
+}
 
 #[derive(serde::Serialize, Debug, PartialEq, Clone, Copy, Default)]
 pub struct DirtyCounts {
@@ -320,7 +326,7 @@ pub struct GitStatusInfo {
 pub fn git_status(cwd: String) -> Option<GitStatusInfo> {
     let dir = Path::new(&cwd);
     let branch = branch_for(dir)?;
-    let dirty = run_git(dir, [QUOTEPATH[0], QUOTEPATH[1], "status", "--porcelain"])
+    let dirty = run_git(dir, quotepath_args(["status", "--porcelain"]))
         .ok()
         .map(|out| parse_status_porcelain(&out));
     Some(GitStatusInfo { branch, dirty })
@@ -389,47 +395,39 @@ fn base_branch(cwd: &Path) -> Result<String, String> {
         .ok_or_else(|| "main worktree is on a detached HEAD".to_string())
 }
 
-/// `--no-renames` keeps the numstat parser trivial (a rename is a delete +
-/// an add); `--no-ext-diff` shields the output from any diff.external the
-/// user configured.
-const DIFF_OPTS: [&str; 2] = ["--no-renames", "--no-ext-diff"];
+/// One `git diff` invocation's arguments. Building them in one place means no
+/// call site can forget the flags they all need: quotepath off (see
+/// [`quotepath_args`]), `--no-renames` so the numstat parser stays trivial (a
+/// rename is a delete + an add), and `--no-ext-diff` so a user's
+/// `diff.external` can't reshape the output.
+///
+/// `rev` is the revision or range to diff against (None = index vs worktree),
+/// `path` limits the diff to one file.
+fn diff_args<'a>(rev: Option<&'a str>, numstat: bool, path: Option<&'a str>) -> Vec<&'a str> {
+    let mut args = quotepath_args(["diff"]);
+    args.extend(rev);
+    if numstat {
+        args.push("--numstat");
+    }
+    args.extend(["--no-renames", "--no-ext-diff"]);
+    if let Some(path) = path {
+        args.extend(["--", path]);
+    }
+    args
+}
 
 pub fn diff_summary_impl(cwd: &Path, mode: &str) -> Result<DiffSummary, String> {
-    let qp = QUOTEPATH;
     match mode {
         "working" => {
             // Everything uncommitted (staged + unstaged) vs HEAD. Unborn
             // HEAD (fresh repo): fall back to index-vs-worktree — new files
             // there are untracked and covered by the ls-files pass anyway.
-            let numstat = run_git(
-                cwd,
-                [
-                    qp[0],
-                    qp[1],
-                    "diff",
-                    "HEAD",
-                    "--numstat",
-                    DIFF_OPTS[0],
-                    DIFF_OPTS[1],
-                ],
-            )
-            .or_else(|_| {
-                run_git(
-                    cwd,
-                    [
-                        qp[0],
-                        qp[1],
-                        "diff",
-                        "--numstat",
-                        DIFF_OPTS[0],
-                        DIFF_OPTS[1],
-                    ],
-                )
-            })?;
+            let numstat = run_git(cwd, diff_args(Some("HEAD"), true, None))
+                .or_else(|_| run_git(cwd, diff_args(None, true, None)))?;
             let mut files = parse_numstat(&numstat);
             let untracked = run_git(
                 cwd,
-                [qp[0], qp[1], "ls-files", "--others", "--exclude-standard"],
+                quotepath_args(["ls-files", "--others", "--exclude-standard"]),
             )?;
             files.extend(
                 untracked
@@ -449,18 +447,7 @@ pub fn diff_summary_impl(cwd: &Path, mode: &str) -> Result<DiffSummary, String> 
             // range, so the base moving on doesn't pollute the view.
             let base = base_branch(cwd)?;
             let range = format!("{base}...HEAD");
-            let numstat = run_git(
-                cwd,
-                [
-                    qp[0],
-                    qp[1],
-                    "diff",
-                    range.as_str(),
-                    "--numstat",
-                    DIFF_OPTS[0],
-                    DIFF_OPTS[1],
-                ],
-            )?;
+            let numstat = run_git(cwd, diff_args(Some(&range), true, None))?;
             Ok(DiffSummary {
                 files: parse_numstat(&numstat),
                 base: Some(base),
@@ -476,22 +463,21 @@ pub fn diff_file_impl(
     path: &str,
     untracked: bool,
 ) -> Result<String, String> {
-    let qp = QUOTEPATH;
     if untracked {
         // `--no-index` exits 1 when the files differ — that's success here.
-        // git special-cases the literal `/dev/null` on every platform.
+        // git special-cases the literal `/dev/null` on every platform. Not
+        // diff_args(): this compares two explicit paths, so there is no
+        // revision and no rename detection to suppress.
         let out = run_git_raw(
             cwd,
-            [
-                qp[0],
-                qp[1],
+            quotepath_args([
                 "diff",
-                DIFF_OPTS[1],
+                "--no-ext-diff",
                 "--no-index",
                 "--",
                 "/dev/null",
                 path,
-            ],
+            ]),
         )?;
         return match out.status.code() {
             Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string()),
@@ -499,42 +485,13 @@ pub fn diff_file_impl(
         };
     }
     match mode {
-        "working" => run_git(
-            cwd,
-            [
-                qp[0],
-                qp[1],
-                "diff",
-                "HEAD",
-                DIFF_OPTS[0],
-                DIFF_OPTS[1],
-                "--",
-                path,
-            ],
-        )
-        .or_else(|_| {
-            // Same unborn-HEAD fallback as the summary.
-            run_git(
-                cwd,
-                [qp[0], qp[1], "diff", DIFF_OPTS[0], DIFF_OPTS[1], "--", path],
-            )
-        }),
+        // Same unborn-HEAD fallback as the summary.
+        "working" => run_git(cwd, diff_args(Some("HEAD"), false, Some(path)))
+            .or_else(|_| run_git(cwd, diff_args(None, false, Some(path)))),
         "branch" => {
             let base = base_branch(cwd)?;
             let range = format!("{base}...HEAD");
-            run_git(
-                cwd,
-                [
-                    qp[0],
-                    qp[1],
-                    "diff",
-                    range.as_str(),
-                    DIFF_OPTS[0],
-                    DIFF_OPTS[1],
-                    "--",
-                    path,
-                ],
-            )
+            run_git(cwd, diff_args(Some(&range), false, Some(path)))
         }
         _ => Err(format!("unknown diff mode: {mode}")),
     }

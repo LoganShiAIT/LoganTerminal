@@ -1,12 +1,26 @@
 /**
- * Platform-aware keyboard hint labels. Hints are written in Mac glyph form
- * ("⌘⇧D") throughout the app; on Windows/Linux they render as
- * "Ctrl+Shift+D", since ⌘ means nothing on those keyboards. Mirrors the
- * actual key handling, which maps the app modifier to metaKey on Mac and
- * ctrlKey elsewhere.
+ * Platform-aware keyboard handling: the single source of truth for "is this
+ * a Mac" and "did the user press the app modifier", plus the hint labels
+ * that must mirror it.
  */
-const isMac = navigator.userAgent.includes("Mac");
+export const isMac = navigator.userAgent.includes("Mac");
 
+/**
+ * True when the event carries the app's own modifier.
+ *
+ * Mac: ⌘ only, and never with Ctrl held — plain Ctrl must reach the shell
+ * untouched (Ctrl+D EOF, Ctrl+K kill-line, Ctrl+T transpose). Everywhere
+ * else Ctrl is the app modifier.
+ */
+export function hasAppMod(e: KeyboardEvent): boolean {
+  return isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
+}
+
+/**
+ * Hint labels are written in Mac glyph form ("⌘⇧D") throughout the app; on
+ * Windows/Linux they render as "Ctrl+Shift+D", since ⌘ means nothing on
+ * those keyboards.
+ */
 const MODS: Record<string, string> = {
   "⌘": "Ctrl",
   "⌃": "Ctrl",

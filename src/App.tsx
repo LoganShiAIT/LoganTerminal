@@ -27,48 +27,13 @@ import { formatDuration } from "./lib/duration";
 import { homeDir, tildify } from "./lib/paths";
 import { attachReviewPaths } from "./lib/reviewAttachments";
 import { sendTermCmd } from "./lib/termBus";
-import { kbd } from "./lib/keys";
+import { kbd, isMac } from "./lib/keys";
+import { matchBinding } from "./lib/keymap";
+import { APP_BINDINGS } from "./appBindings";
 import { dirtyTotal } from "./lib/git";
 import { useT } from "./i18n";
 
-const isMac = navigator.userAgent.includes("Mac");
 const CLAUDE_CACHE_WINDOW_MS = 5 * 60 * 1000;
-
-/**
- * Move pane focus geometrically (⌘⌥arrows). Panes are located via their
- * data-pane-id DOM rects; hidden tabs' panes have zero size and are skipped.
- */
-function focusDirectionalPane(dir: "left" | "right" | "up" | "down") {
-  const s = usePtyStore.getState();
-  const tab = s.tabs.find((t) => t.id === s.activeTabId);
-  if (!tab || tab.root.type === "leaf") return;
-  const els = Array.from(
-    document.querySelectorAll<HTMLElement>("[data-pane-id]"),
-  ).filter((el) => el.offsetWidth > 0 && el.offsetHeight > 0);
-  const current = els.find((el) => el.dataset.paneId === tab.activePaneId);
-  if (!current) return;
-  const c = current.getBoundingClientRect();
-  const cx = c.left + c.width / 2;
-  const cy = c.top + c.height / 2;
-  let best: { id: string; score: number } | null = null;
-  for (const el of els) {
-    if (el === current) continue;
-    const r = el.getBoundingClientRect();
-    const dx = r.left + r.width / 2 - cx;
-    const dy = r.top + r.height / 2 - cy;
-    const inDir =
-      dir === "right" ? dx > 1 : dir === "left" ? dx < -1 : dir === "down" ? dy > 1 : dy < -1;
-    if (!inDir) continue;
-    const primary = dir === "left" || dir === "right" ? Math.abs(dx) : Math.abs(dy);
-    const cross = dir === "left" || dir === "right" ? Math.abs(dy) : Math.abs(dx);
-    const score = primary + cross * 2;
-    if (!best || score < best.score) best = { id: el.dataset.paneId!, score };
-  }
-  if (best) {
-    s.setActivePane(tab.id, best.id);
-    requestAnimationFrame(() => sendTermCmd("focus"));
-  }
-}
 
 export default function App() {
   const t = useT();
@@ -151,110 +116,11 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Mac: ⌘ only — plain Ctrl must reach the shell untouched (Ctrl+D EOF,
-      // Ctrl+K kill-line, Ctrl+T transpose). Elsewhere Ctrl is the app mod.
-      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
-      if (!mod) return;
-      const store = usePtyStore.getState();
-      if (e.key === "t" && !e.shiftKey) {
-        e.preventDefault();
-        const leaf = getActiveLeaf();
-        store.addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
-      } else if ((e.key === "w" || e.key === "W") && e.shiftKey) {
-        // Shift avoids plain Cmd+W, which macOS's default window menu
-        // intercepts before it reaches the webview and closes the whole app.
-        // Closes the focused pane; the last pane of a tab closes the tab.
-        e.preventDefault();
-        store.closeActivePane();
-        requestAnimationFrame(() => sendTermCmd("focus"));
-      } else if ((e.key === "d" || e.key === "D") && (isMac || e.shiftKey)) {
-        // Windows keeps plain Ctrl+D for the shell; Ctrl+Shift+D splits
-        // (down), and split-right stays reachable via the palette.
-        e.preventDefault();
-        store.splitPane(e.shiftKey ? "col" : "row");
-        requestAnimationFrame(() => sendTermCmd("focus"));
-      } else if ((e.key === "z" || e.key === "Z") && e.shiftKey) {
-        // Matches WezTerm's default TogglePaneZoomState binding.
-        e.preventDefault();
-        store.toggleZoom();
-        requestAnimationFrame(() => sendTermCmd("focus"));
-      } else if (e.altKey && e.key.startsWith("Arrow")) {
-        e.preventDefault();
-        focusDirectionalPane(
-          e.key === "ArrowLeft"
-            ? "left"
-            : e.key === "ArrowRight"
-              ? "right"
-              : e.key === "ArrowUp"
-                ? "up"
-                : "down",
-        );
-      } else if (e.altKey && e.code === "KeyI") {
-        // iTerm2's broadcast-input convention. Match the physical key: on
-        // mac, ⌥ composes dead keys into e.key ("ı"), never a plain "i".
-        e.preventDefault();
-        if (store.activeTabId) store.toggleBroadcast(store.activeTabId);
-      } else if (e.shiftKey && e.key === "]") {
-        e.preventDefault();
-        store.cycleTab(1);
-      } else if (e.shiftKey && e.key === "[") {
-        e.preventDefault();
-        store.cycleTab(-1);
-      } else if (/^[1-9]$/.test(e.key)) {
-        e.preventDefault();
-        store.jumpToTab(parseInt(e.key, 10) - 1);
-      } else if (e.key === ",") {
-        e.preventDefault();
-        const settings = useSettingsStore.getState();
-        settings.setPanelOpen(!settings.panelOpen);
-      } else if (e.key === "p" || e.key === "P") {
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        ui.setPaletteOpen(!ui.paletteOpen);
-      } else if ((e.key === "o" || e.key === "O") && e.shiftKey) {
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        ui.setDashboardOpen(!ui.dashboardOpen);
-      } else if ((e.key === "f" || e.key === "F") && e.shiftKey) {
-        // Plain ⌘F stays with xterm's scrollback search (Terminal.tsx);
-        // ⇧ widens the search from "this pane's output" to "the disk".
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        ui.setFileSearchOpen(!ui.fileSearchOpen);
-      } else if ((e.key === "n" || e.key === "N") && e.shiftKey) {
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        ui.setWorktreeModalOpen(!ui.worktreeModalOpen);
-      } else if ((e.key === "g" || e.key === "G") && e.shiftKey) {
-        // Diff panel: bring it up; if it's already the visible tab, hide
-        // the sidebar again (a true toggle for review-glance workflows).
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        if (ui.rightSidebarOpen && ui.rightPanelTab === "diff") {
-          ui.toggleRightSidebar();
-        } else {
-          ui.setRightPanelTab("diff");
-          if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
-        }
-      } else if ((e.key === "m" || e.key === "M") && e.shiftKey) {
-        // Math preview: pull the terminal selection (or the last command's
-        // output) into the panel and show it.
-        e.preventDefault();
-        const ui = useUiStore.getState();
-        if (ui.rightSidebarOpen && ui.rightPanelTab === "math") {
-          ui.toggleRightSidebar();
-        } else {
-          sendTermCmd("send-selection");
-          ui.setRightPanelTab("math");
-          if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
-        }
-      } else if ((e.key === "b" || e.key === "B") && !e.shiftKey) {
-        e.preventDefault();
-        useUiStore.getState().toggleLeftSidebar();
-      } else if ((e.key === "j" || e.key === "J") && !e.shiftKey) {
-        e.preventDefault();
-        useUiStore.getState().toggleRightSidebar();
-      }
+      const binding = matchBinding(APP_BINDINGS, e);
+      if (!binding) return;
+      e.preventDefault();
+      binding.run(e);
+      if (binding.refocus) requestAnimationFrame(() => sendTermCmd("focus"));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -561,11 +427,7 @@ function StatusCluster() {
       {pane?.gitBranch && !exited && (
         <button
           className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge max-w-[200px] hover:text-accent hover:border-accent/35 transition-colors"
-          onClick={() => {
-            const ui = useUiStore.getState();
-            ui.setRightPanelTab("diff");
-            if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
-          }}
+          onClick={() => useUiStore.getState().openRightPanel("diff")}
           title={
             t("Git branch of {where}", { where: cwd ?? t("cwd") }) +
             (dirtyTotal(pane.gitDirty) > 0

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tildify, basename, joinPath, parentOf } from "./paths";
+import { tildify, basename, dirLabel, joinPath, parentOf } from "./paths";
 
 describe("tildify", () => {
   it("collapses the home prefix to ~", () => {
@@ -74,5 +74,14 @@ describe("parentOf", () => {
     // parentOf(p) === p root check promised in the doc comment.
     expect(parentOf("C:\\")).toBe("C:\\");
     expect(parentOf(parentOf("C:\\a"))).toBe("C:\\");
+  });
+});
+
+describe("dirLabel", () => {
+  it("shows the last segment, and the root as /", () => {
+    expect(dirLabel("/Users/logan/code")).toBe("code");
+    expect(dirLabel("/Users/logan/code/")).toBe("code");
+    expect(dirLabel("/")).toBe("/");
+    expect(dirLabel("C:\\Users\\logan")).toBe("logan");
   });
 });

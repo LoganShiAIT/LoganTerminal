@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import {
   useSettingsStore,
   MIN_FONT_SIZE,
@@ -11,6 +11,7 @@ import { usePromptStore } from "../../stores/promptStore";
 import { THEMES } from "../../themes";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 
 const ACCENT_PRESETS = [
   "#d97757", // claude coral
@@ -26,19 +27,7 @@ export default function SettingsPanel() {
   const open = useSettingsStore((s) => s.panelOpen);
   const setOpen = useSettingsStore((s) => s.setPanelOpen);
 
-  // Capture-phase Esc so it wins over the focused xterm textarea.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, setOpen]);
+  useEscapeClose(open, () => setOpen(false));
 
   if (!open) return null;
 

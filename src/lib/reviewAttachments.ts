@@ -19,8 +19,6 @@ export async function attachReviewPaths(paths: string[]) {
 
   if (items.length > 0) {
     useReviewStore.getState().addAttachments(items);
-    const ui = useUiStore.getState();
-    if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
-    ui.setRightPanelTab("review");
+    useUiStore.getState().openRightPanel("review");
   }
 }

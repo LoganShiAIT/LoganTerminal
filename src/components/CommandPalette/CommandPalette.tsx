@@ -13,8 +13,9 @@ import { fuzzyMatch } from "../../lib/fuzzy";
 import { recentActionIds, recordAction, recencyBoost } from "../../lib/recency";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
-import { basename } from "../../lib/paths";
+import { dirLabel } from "../../lib/paths";
 import { t } from "../../i18n";
+import { useEscapeClose } from "../../lib/useEscapeClose";
 
 interface PaletteAction {
   id: string;
@@ -86,7 +87,7 @@ function useActions(): PaletteAction[] {
           label: t("{agent} needs attention — tab {n}{where}", {
             agent: leaf.agentName ?? t("shell"),
             n: tabIndex + 1,
-            where: cwd ? ` · ${basename(cwd) || "/"}` : "",
+            where: cwd ? ` · ${dirLabel(cwd)}` : "",
           }),
           transient: true,
           run: () => {
@@ -151,7 +152,7 @@ function useActions(): PaletteAction[] {
         group: t("Tabs"),
         label: t("Go to tab {n} — {where}", {
           n: i + 1,
-          where: cwd ? basename(cwd) || "/" : t("shell"),
+          where: cwd ? dirLabel(cwd) : t("shell"),
         }),
         hint: i < 9 ? kbd(`⌘${i + 1}`) : undefined,
         active: tab.id === activeTabId,
@@ -351,22 +352,14 @@ function useActions(): PaletteAction[] {
         group: t("View"),
         label: t("Show assets panel"),
         active: rightPanelTab === "assets",
-        run: () => {
-          const s = ui();
-          s.setRightPanelTab("assets");
-          if (!s.rightSidebarOpen) s.toggleRightSidebar();
-        },
+        run: () => ui().openRightPanel("assets"),
       },
       {
         id: "view-review",
         group: t("View"),
         label: t("Show review panel"),
         active: rightPanelTab === "review",
-        run: () => {
-          const s = ui();
-          s.setRightPanelTab("review");
-          if (!s.rightSidebarOpen) s.toggleRightSidebar();
-        },
+        run: () => ui().openRightPanel("review"),
       },
       {
         id: "view-diff",
@@ -374,11 +367,7 @@ function useActions(): PaletteAction[] {
         label: t("Show git diff panel"),
         hint: kbd("⌘⇧G"),
         active: rightPanelTab === "diff",
-        run: () => {
-          const s = ui();
-          s.setRightPanelTab("diff");
-          if (!s.rightSidebarOpen) s.toggleRightSidebar();
-        },
+        run: () => ui().openRightPanel("diff"),
       },
       {
         id: "view-math",
@@ -388,10 +377,8 @@ function useActions(): PaletteAction[] {
         keepFocus: true,
         active: rightPanelTab === "math",
         run: () => {
-          const s = ui();
           sendTermCmd("send-selection");
-          s.setRightPanelTab("math");
-          if (!s.rightSidebarOpen) s.toggleRightSidebar();
+          ui().openRightPanel("math");
         },
       },
       {
@@ -544,17 +531,12 @@ export default function CommandPalette() {
     setSelected(0);
     // Next frame so the input exists after the conditional render.
     requestAnimationFrame(() => inputRef.current?.focus());
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-        sendTermCmd("focus");
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, setOpen]);
+  }, [open]);
+
+  useEscapeClose(open, () => {
+    setOpen(false);
+    sendTermCmd("focus");
+  });
 
   // Re-read once per open (not per keystroke): running an action closes the
   // palette, so the list can only change between opens.

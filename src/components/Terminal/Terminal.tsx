@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Terminal as XTerm,
-  type IMarker,
-  type IBufferLine,
-  type IBufferCell,
-} from "@xterm/xterm";
+import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
@@ -12,59 +7,29 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { usePtyStore, findLeaf, collectLeaves } from "../../stores/ptyStore";
+import {
+  usePtyStore,
+  findLeaf,
+  collectLeaves,
+  paneWhere,
+} from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { useMathStore, useMathHoverStore } from "../../stores/mathStore";
-import { useUiStore } from "../../stores/uiStore";
-import { renderMath } from "../../lib/math";
-import { findRowSpans, findLastMathBlock, type MathSpan } from "../../lib/mathScan";
+import { useMathStore } from "../../stores/mathStore";
 import { buildXtermTheme, buildSearchDecorations } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
-import { formatDuration } from "../../lib/duration";
 import { notify } from "../../lib/notify";
 import { openTerminalLink } from "../../lib/openLink";
-import { basename } from "../../lib/paths";
+import { hasAppMod } from "../../lib/keys";
+import { installShellIntegration } from "../../lib/shellIntegration";
+import { installMathAwareness } from "../../lib/mathAwareness";
 import type { GitStatusInfo } from "../../lib/git";
 import "@xterm/xterm/css/xterm.css";
 import { t } from "../../i18n";
 
-/** A finished command at least this long pings the OS when out of view. */
-const NOTIFY_AFTER_MS = 10_000;
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
-/** Rows of scrollback the math scan looks back over. */
-const MATH_SCAN_ROWS = 300;
-const MATH_SCAN_DEBOUNCE_MS = 400;
-/** Ceiling on live decorations — a screenful of formulas is already a lot. */
-const MAX_MATH_DECORATIONS = 80;
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
-
-/**
- * Maps each character index of a row's text to the terminal column it starts
- * at. `translateToString` collapses a wide (CJK) cell into one JS character
- * while it occupies two columns, so decoration coordinates derived from
- * string indices drift right after any Chinese text. Walking the cells is the
- * only public way to recover the real columns. Index `length` holds the
- * column just past the last character, so callers can measure a span's end.
- */
-function columnMap(
-  line: IBufferLine | undefined,
-  length: number,
-  cell: IBufferCell,
-): number[] {
-  const columns: number[] = [];
-  if (!line) return columns;
-  for (let x = 0; x < line.length && columns.length <= length; x++) {
-    if (!line.getCell(x, cell)) continue;
-    if (cell.getWidth() === 0) continue; // trailing half of a wide char
-    const chars = cell.getChars() || " ";
-    for (let k = 0; k < chars.length; k++) columns.push(x);
-    if (columns.length > length) break;
-  }
-  columns.push(columns.length > 0 ? columns[columns.length - 1] + 1 : 0);
-  return columns;
-}
 
 interface TerminalProps {
   tabId: string;
@@ -77,8 +42,6 @@ function searchDecorations() {
   const s = useSettingsStore.getState();
   return buildSearchDecorations(s.themeId, s.accentOverride);
 }
-
-const isMac = navigator.userAgent.includes("Mac");
 
 function submitsPrompt(data: string): boolean {
   // Prompt snippets and multi-line paste should not look like "sent" just
@@ -170,126 +133,7 @@ export default function Terminal({
       },
     );
 
-    // Shell-integration prompt markers (OSC 133; zsh + bash — see pty.rs's
-    // shell hooks). Registering directly on xterm's parser keeps markers in
-    // perfect sync with the byte offset they were emitted at; a Rust-side
-    // parse-then-event round trip could race the write it describes.
-    // A;  — new prompt about to render (jump target + failure-tick anchor,
-    //       closes the previous command's output region)
-    // B;  — prompt finished rendering, input starts here (unused for now)
-    // C;  — command just started executing (clears the stale exit code,
-    //       opens the output region ⌘⇧A selects, starts the duration
-    //       clock; needs bash >= 4.4 there)
-    // D;n — previous command finished with exit code n
-    let promptMarks: IMarker[] = [];
-    let pendingPromptMark: IMarker | null = null;
-    let cmdStartMark: IMarker | null = null;
-    let cmdStartedAt: number | null = null;
-    let lastDurationMs: number | null = null;
-    let lastOutput: { start: IMarker; end: IMarker } | null = null;
-    const jumpToPrompt = (dir: 1 | -1) => {
-      promptMarks = promptMarks.filter((m) => !m.isDisposed);
-      if (promptMarks.length === 0) return;
-      const viewportY = term.buffer.active.viewportY;
-      if (dir === -1) {
-        for (let i = promptMarks.length - 1; i >= 0; i--) {
-          if (promptMarks[i].line < viewportY) {
-            term.scrollToLine(promptMarks[i].line);
-            return;
-          }
-        }
-        term.scrollToLine(promptMarks[0].line);
-      } else {
-        for (const mark of promptMarks) {
-          if (mark.line > viewportY) {
-            term.scrollToLine(mark.line);
-            return;
-          }
-        }
-        term.scrollToBottom();
-      }
-    };
-    // Select the region between the last C (command start) and the A that
-    // followed it (next prompt) — i.e. the last command's output.
-    const selectLastOutput = () => {
-      if (!lastOutput) return;
-      const { start, end } = lastOutput;
-      if (start.isDisposed || end.isDisposed) return;
-      const to = end.line - 1; // stop above the next prompt's row
-      if (to < start.line) return; // command printed nothing
-      term.selectLines(start.line, to);
-      term.scrollToLine(start.line);
-    };
-    const oscHandler = term.parser.registerOscHandler(133, (data) => {
-      const [kind, arg] = data.split(";");
-      if (kind === "A") {
-        promptMarks = promptMarks.filter((m) => !m.isDisposed);
-        const mark = term.registerMarker(0);
-        if (mark) {
-          promptMarks.push(mark);
-          pendingPromptMark = mark;
-          if (cmdStartMark && !cmdStartMark.isDisposed) {
-            lastOutput = { start: cmdStartMark, end: mark };
-          }
-          cmdStartMark = null;
-        }
-      } else if (kind === "C") {
-        usePtyStore.getState().setCommandResult(paneId, null, null);
-        cmdStartMark = term.registerMarker(0) ?? null;
-        cmdStartedAt = Date.now();
-      } else if (kind === "D") {
-        const code = arg !== undefined ? parseInt(arg, 10) : NaN;
-        if (!Number.isFinite(code)) return true;
-        // A D with no preceding C (Enter on an empty prompt line) keeps the
-        // previous duration — otherwise the chip vanishes while the exit
-        // chip persists, which reads as two contradicting states. Only a
-        // freshly measured duration may trigger the long-command toast,
-        // else an empty Enter would re-announce the previous command.
-        const fresh = cmdStartedAt !== null;
-        const durationMs =
-          cmdStartedAt !== null ? Date.now() - cmdStartedAt : lastDurationMs;
-        lastDurationMs = durationMs;
-        cmdStartedAt = null;
-        const store = usePtyStore.getState();
-        store.setCommandResult(paneId, code, durationMs);
-        if (code !== 0 && pendingPromptMark && !pendingPromptMark.isDisposed) {
-          term.registerDecoration({
-            marker: pendingPromptMark,
-            overviewRulerOptions: { color: "#f87171", position: "left" },
-          });
-        }
-        // A long command finishing is the other strong attention signal
-        // (independent of the OS-toast preference — the chip is in-app).
-        if (fresh && durationMs !== null && durationMs >= NOTIFY_AFTER_MS) {
-          store.markAttention(tabId, paneId);
-        }
-        // Long command finished while nobody was looking (app unfocused or
-        // tab hidden — a visible split pane in the active tab counts as
-        // looked-at) → OS toast. Panes without a C marker (bash 3.2) never
-        // get a duration, so they can't ping either.
-        if (
-          fresh &&
-          durationMs !== null &&
-          durationMs >= NOTIFY_AFTER_MS &&
-          useSettingsStore.getState().notifyLongCommands &&
-          (!document.hasFocus() || store.activeTabId !== tabId)
-        ) {
-          const tab = store.tabs.find((t) => t.id === tabId);
-          const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
-          const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
-          notify(
-            code === 0
-              ? t("Command finished")
-              : t("Command failed (exit {code})", { code }),
-            t("{duration} in {where}", {
-              duration: formatDuration(durationMs),
-              where,
-            }),
-          );
-        }
-      }
-      return true;
-    });
+    const shell = installShellIntegration(term, { tabId, paneId });
 
     const updateAtBottom = () => {
       const buf = term.buffer.active;
@@ -297,117 +141,15 @@ export default function Terminal({
     };
     const scrollDisposable = term.onScroll(updateAtBottom);
 
-    // --- Math awareness -------------------------------------------------
-    // One debounced scan of the tail of the buffer feeds both features:
-    // auto-follow (push the newest formula into the Math panel) and the
-    // inline underline + hover preview. Decorations are the only supported
-    // way to put our own DOM over the grid — xterm itself renders text only.
-    let mathScanTimer: number | null = null;
-    let mathDisposables: Array<{ dispose: () => void }> = [];
-
-    const clearMathDecorations = () => {
-      for (const d of mathDisposables) d.dispose();
-      mathDisposables = [];
-    };
-
-    const decorateSpan = (el: HTMLElement, span: MathSpan) => {
-      // classList.add, never className: xterm's own `xterm-decoration` class
-      // carries the absolute positioning that puts this element over the grid.
-      el.classList.add("math-underline");
-      // Property assignment (not addEventListener): onRender fires again on
-      // every re-render and must not stack handlers.
-      el.onmouseenter = () => {
-        const rect = el.getBoundingClientRect();
-        useMathHoverStore.getState().show({
-          html: renderMath(span.value, span.display),
-          anchor: {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-          },
-        });
-      };
-      el.onmouseleave = () => useMathHoverStore.getState().hide();
-      el.onclick = () => {
-        useMathHoverStore.getState().hide();
-        useMathStore
-          .getState()
-          .setSource(span.display ? `$$${span.value}$$` : `$${span.value}$`, "selection");
-        const ui = useUiStore.getState();
-        ui.setRightPanelTab("math");
-        if (!ui.rightSidebarOpen) ui.toggleRightSidebar();
-      };
-    };
-
-    const scanMath = () => {
-      const settings = useSettingsStore.getState();
-      if (!settings.mathInline && !settings.mathAutoFollow) {
-        clearMathDecorations();
-        return;
-      }
-      const buf = term.buffer.active;
-      const bottom = buf.baseY + term.rows;
-      const top = Math.max(0, bottom - MATH_SCAN_ROWS);
-      const rows: string[] = [];
-      for (let y = top; y < bottom; y++) {
-        rows.push(buf.getLine(y)?.translateToString(true) ?? "");
-      }
-
-      // Only the pane you are actually watching may hijack the panel.
-      if (settings.mathAutoFollow && activeRef.current) {
-        const block = findLastMathBlock(rows);
-        if (block) useMathStore.getState().autoFollow(block);
-      }
-
-      clearMathDecorations();
-      if (!settings.mathInline) return;
-
-      const cursorLine = buf.baseY + buf.cursorY;
-      const nullCell = buf.getNullCell();
-      let placed = 0;
-      for (let i = 0; i < rows.length && placed < MAX_MATH_DECORATIONS; i++) {
-        const spans = findRowSpans(rows[i]);
-        if (spans.length === 0) continue;
-        // String index ≠ terminal column once CJK is on the line (one char,
-        // two cells), so map through the actual cells before positioning.
-        const columns = columnMap(buf.getLine(top + i), rows[i].length, nullCell);
-        for (const span of spans) {
-          if (placed >= MAX_MATH_DECORATIONS) break;
-          const marker = term.registerMarker(top + i - cursorLine);
-          if (!marker) continue;
-          const x = columns[span.start] ?? span.start;
-          const endX = columns[span.end] ?? (columns[columns.length - 1] ?? span.end) + 1;
-          const decoration = term.registerDecoration({
-            marker,
-            x,
-            width: Math.max(1, endX - x),
-            height: 1,
-            layer: "top",
-          });
-          if (!decoration) {
-            marker.dispose();
-            continue;
-          }
-          decoration.onRender((el) => decorateSpan(el, span));
-          mathDisposables.push(decoration, marker);
-          placed++;
-        }
-      }
-    };
-
-    const scheduleMathScan = () => {
-      if (mathScanTimer !== null) window.clearTimeout(mathScanTimer);
-      mathScanTimer = window.setTimeout(scanMath, MATH_SCAN_DEBOUNCE_MS);
-    };
-    scanMathRef.current = scheduleMathScan;
+    const math = installMathAwareness(term, {
+      isActive: () => activeRef.current,
+    });
+    scanMathRef.current = math.scheduleScan;
 
     const writeDisposable = term.onWriteParsed(() => {
       updateAtBottom();
-      scheduleMathScan();
+      math.scheduleScan();
     });
-    // A reflow re-wraps every row, so all column positions are stale.
-    const resizeMathDisposable = term.onResize(scheduleMathScan);
 
     // BEL: agent CLIs ring it when they need input. Marks the pane dot
     // (store no-ops when this pane is being watched) and pings the OS when
@@ -426,12 +168,11 @@ export default function Terminal({
       lastBellToast = now;
       const tab = store.tabs.find((t) => t.id === tabId);
       const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
-      const where = leaf?.cwd ? basename(leaf.cwd) || "/" : "shell";
       notify(
         leaf?.agentName
           ? t("{name} needs attention", { name: leaf.agentName })
           : t("Terminal bell"),
-        t("in {where}", { where }),
+        t("in {where}", { where: paneWhere(tabId, paneId) }),
       );
     });
 
@@ -440,10 +181,14 @@ export default function Terminal({
       usePtyStore.getState().setPaneTitle(paneId, title.trim() || null);
     });
 
-    let unlistenData: UnlistenFn | null = null;
-    let unlistenExit: UnlistenFn | null = null;
-    let unlistenCwd: UnlistenFn | null = null;
-    let unlistenAgent: UnlistenFn | null = null;
+    // Every `pty://…` subscription for the current session, torn down as one
+    // unit — a missed handle here outlives the component and keeps writing
+    // into a disposed terminal.
+    let unlistenAll: UnlistenFn[] = [];
+    const unlistenSession = () => {
+      for (const fn of unlistenAll) fn();
+      unlistenAll = [];
+    };
     let sessionId: string | null = null;
     let disposed = false;
     let spawning = false;
@@ -464,19 +209,19 @@ export default function Terminal({
         try {
           const id = crypto.randomUUID();
           sessionId = id;
-          unlistenData = await listen<string>(`pty://data/${id}`, (e) => {
+          unlistenAll.push(await listen<string>(`pty://data/${id}`, (e) => {
             term.write(e.payload);
             // Store no-ops when this pane is the one being watched.
             usePtyStore.getState().markUnread(tabId, paneId);
-          });
-          unlistenExit = await listen(`pty://exit/${id}`, () => {
+          }));
+          unlistenAll.push(await listen(`pty://exit/${id}`, () => {
             term.writeln(`\r\n\x1b[31m${t("[process exited]")}\x1b[0m`);
             exited = true;
             const store = usePtyStore.getState();
             store.markPaneExited(paneId);
             store.markUnread(tabId, paneId);
-          });
-          unlistenCwd = await listen<string>(`pty://cwd/${id}`, (e) => {
+          }));
+          unlistenAll.push(await listen<string>(`pty://cwd/${id}`, (e) => {
             usePtyStore.getState().setCwd(paneId, e.payload);
             // OSC 7 fires every prompt (not just on chdir), so this also
             // catches `git checkout` in place — no polling needed. Branch +
@@ -495,12 +240,11 @@ export default function Terminal({
               .finally(() => {
                 gitStatusInFlight = false;
               });
-          });
-          unlistenAgent = await listen<string | null>(
-            `pty://agent/${id}`,
-            (e) => {
+          }));
+          unlistenAll.push(
+            await listen<string | null>(`pty://agent/${id}`, (e) => {
               usePtyStore.getState().setAgentName(paneId, e.payload ?? null);
-            },
+            }),
           );
 
           await invoke<string>("pty_spawn", {
@@ -514,10 +258,7 @@ export default function Terminal({
             // these handles still null), so tear the listeners down here
             // or they outlive the component.
             invoke("pty_kill", { sessionId: id });
-            unlistenData?.();
-            unlistenExit?.();
-            unlistenCwd?.();
-            unlistenAgent?.();
+            unlistenSession();
             return;
           }
           usePtyStore.getState().setSessionId(paneId, id);
@@ -561,10 +302,7 @@ export default function Terminal({
             }
           });
         } catch (err) {
-          unlistenData?.();
-          unlistenExit?.();
-          unlistenCwd?.();
-          unlistenAgent?.();
+          unlistenSession();
           sessionId = null;
           usePtyStore.getState().setSessionId(paneId, null);
           term.writeln(`\r\n\x1b[31mpty_spawn failed: ${err}\x1b[0m`);
@@ -600,13 +338,13 @@ export default function Terminal({
       if (s.cursorBlink !== prev.cursorBlink) {
         term.options.cursorBlink = s.cursorBlink;
       }
-      if (s.mathInline !== prev.mathInline || s.mathAutoFollow !== prev.mathAutoFollow) {
+      if (
+        s.mathInline !== prev.mathInline ||
+        s.mathAutoFollow !== prev.mathAutoFollow
+      ) {
         // Turning either off must take effect now, not at the next write.
-        if (!s.mathInline) {
-          clearMathDecorations();
-          useMathHoverStore.getState().hide();
-        }
-        scheduleMathScan();
+        if (!s.mathInline) math.clearDecorations();
+        math.scheduleScan();
       }
     });
 
@@ -635,13 +373,13 @@ export default function Terminal({
           term.focus();
           break;
         case "prompt-prev":
-          jumpToPrompt(-1);
+          shell.jumpToPrompt(-1);
           break;
         case "prompt-next":
-          jumpToPrompt(1);
+          shell.jumpToPrompt(1);
           break;
         case "select-output":
-          selectLastOutput();
+          shell.selectLastOutput();
           break;
         case "send-selection": {
           // Prefer what the user highlighted; with nothing selected, fall
@@ -650,7 +388,7 @@ export default function Terminal({
           let text = term.getSelection();
           let origin: "selection" | "output" = "selection";
           if (!text.trim()) {
-            selectLastOutput();
+            shell.selectLastOutput();
             text = term.getSelection();
             origin = "output";
           }
@@ -662,9 +400,7 @@ export default function Terminal({
 
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return;
-      // Mac: ⌘ only, so Ctrl+K (kill-line) etc. still reach the shell.
-      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
-      if (!mod) return;
+      if (!hasAppMod(e)) return;
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
         useSettingsStore.getState().bumpFontSize(1);
@@ -683,15 +419,15 @@ export default function Terminal({
       } else if (e.key === "ArrowUp") {
         // Mod+arrows (not plain arrows, which stay with shell history).
         e.preventDefault();
-        jumpToPrompt(-1);
+        shell.jumpToPrompt(-1);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        jumpToPrompt(1);
+        shell.jumpToPrompt(1);
       } else if ((e.key === "a" || e.key === "A") && e.shiftKey) {
         // iTerm2's "Select Output of Last Command" convention; plain ⌘A is
         // left alone so select-all behavior stays untouched.
         e.preventDefault();
-        selectLastOutput();
+        shell.selectLastOutput();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -706,24 +442,18 @@ export default function Terminal({
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
-      unlistenData?.();
-      unlistenExit?.();
-      unlistenCwd?.();
-      unlistenAgent?.();
+      unlistenSession();
       if (sessionId && !exited) {
         invoke("pty_kill", { sessionId });
       }
       searchResults.dispose();
-      if (mathScanTimer !== null) window.clearTimeout(mathScanTimer);
-      clearMathDecorations();
-      useMathHoverStore.getState().hide();
+      math.dispose();
       scanMathRef.current = null;
       scrollDisposable.dispose();
       writeDisposable.dispose();
-      resizeMathDisposable.dispose();
       bellDisposable.dispose();
       titleDisposable.dispose();
-      oscHandler.dispose();
+      shell.dispose();
       termRef.current = null;
       searchRef.current = null;
       term.dispose();
