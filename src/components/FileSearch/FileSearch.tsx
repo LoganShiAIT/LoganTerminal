@@ -181,7 +181,7 @@ export default function FileSearch() {
         if (e.target === e.currentTarget) close(true);
       }}
     >
-      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[640px] max-w-[92vw] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
         <div className="flex h-12 items-center gap-2.5 border-b border-edge px-4">
           <SearchIcon />
           <input

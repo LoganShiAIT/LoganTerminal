@@ -193,7 +193,7 @@ export default function PaneTree({
                 )}
                 {isZoomed && (
                   <button
-                    className="absolute top-2 right-2 z-10 flex items-center gap-1.5 h-6 px-2.5 rounded-full border border-accent/40 bg-raise/90 backdrop-blur-md text-[10px] text-accent shadow-[0_2px_12px_rgba(0,0,0,0.35)] hover:bg-accent hover:text-white transition-colors animate-[pop-in_0.12s_ease-out]"
+                    className="lg lg-control lg-interactive lg-accent-hover absolute top-2 right-2 z-10 flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[10px] text-accent hover:text-white animate-[pop-in_0.12s_ease-out]"
                     onClick={() => usePtyStore.getState().toggleZoom()}
                     title={`Restore split view (${kbd("⌘⇧Z")})`}
                   >

@@ -56,6 +56,7 @@ function useActions(): PaletteAction[] {
   const cursorBlink = useSettingsStore((s) => s.cursorBlink);
   const ambientMotion = useSettingsStore((s) => s.ambientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
+  const liquidGlass = useSettingsStore((s) => s.liquidGlass);
   const animSpeed = useSettingsStore((s) => s.animSpeed);
   const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
   const notifyBell = useSettingsStore((s) => s.notifyBell);
@@ -485,6 +486,13 @@ function useActions(): PaletteAction[] {
         run: () => settings().toggleCursorBlink(),
       },
       {
+        id: "fx-glass",
+        group: t("Appearance"),
+        label: t("Toggle Liquid Glass"),
+        active: liquidGlass,
+        run: () => settings().toggleLiquidGlass(),
+      },
+      {
         id: "fx-ambient",
         group: t("Appearance"),
         label: t("Toggle ambient motion"),
@@ -519,6 +527,7 @@ function useActions(): PaletteAction[] {
     cursorBlink,
     ambientMotion,
     crtMode,
+    liquidGlass,
     animSpeed,
     notifyLongCommands,
     notifyBell,
@@ -619,7 +628,7 @@ export default function CommandPalette() {
         }
       }}
     >
-      <div className="w-[580px] max-w-[92vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[580px] max-w-[92vw] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-12 px-4 border-b border-edge">
           <span className="font-mono text-accent text-sm shrink-0">❯</span>
           <input

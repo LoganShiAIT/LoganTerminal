@@ -42,7 +42,7 @@ export default function MathHoverLayer() {
   return createPortal(
     <div
       ref={boxRef}
-      className="pointer-events-none fixed z-[60] max-w-[70vw] rounded-xl border border-edge bg-raise/95 px-3 py-2 shadow-[0_16px_48px_rgba(0,0,0,0.5)] backdrop-blur-xl animate-[pop-in_0.1s_ease-out]"
+      className="lg lg-control pointer-events-none fixed z-[60] max-w-[70vw] rounded-xl px-3 py-2 animate-[pop-in_0.1s_ease-out]"
       style={{
         left: pos?.left ?? -9999,
         top: pos?.top ?? -9999,

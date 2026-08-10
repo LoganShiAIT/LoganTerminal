@@ -349,6 +349,9 @@ export function applyTheme(theme: Theme, accentOverride: string | null) {
     root.style.setProperty(k, v);
   }
   root.style.colorScheme = theme.dark ? "dark" : "light";
+  // Liquid Glass reads this: a light backdrop needs a whiter rim and a
+  // softer shadow, not the brightness lift a dark one wants.
+  root.dataset.appearance = theme.dark ? "dark" : "light";
 }
 
 export function buildXtermTheme(

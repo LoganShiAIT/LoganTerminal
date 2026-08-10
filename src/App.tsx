@@ -134,7 +134,7 @@ export default function App() {
           pointer-driven widgets (tab pills) must opt out via ="false". */}
       <header
         data-tauri-drag-region="deep"
-        className={`relative h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
+        className={`lg lg-chrome h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge ${
           isMac ? "pl-20" : "pl-2"
         }`}
       >
@@ -174,7 +174,7 @@ export default function App() {
 
       <div className="flex flex-1 min-h-0">
         <aside
-          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
+          className="lg lg-chrome shrink-0 overflow-hidden border-edge transition-[width,opacity,border-width] duration-200 ease-out"
           style={{
             width: leftSidebarOpen ? leftSidebarWidth : 0,
             borderRightWidth: leftSidebarOpen ? 1 : 0,
@@ -214,7 +214,7 @@ export default function App() {
 
         <ResizeHandle side="right" active={rightSidebarOpen} />
         <aside
-          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
+          className="lg lg-chrome shrink-0 overflow-hidden border-edge transition-[width,opacity,border-width] duration-200 ease-out"
           style={{
             width: rightSidebarOpen ? rightSidebarWidth : 0,
             borderLeftWidth: rightSidebarOpen ? 1 : 0,
@@ -621,7 +621,7 @@ function WelcomeScreen() {
   const t = useT();
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-7">
-      <div className="grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 bg-raise/50 backdrop-blur-sm animate-[glow-breathe_4.5s_ease-in-out_infinite]">
+      <div className="lg grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 animate-[glow-breathe_4.5s_ease-in-out_infinite]">
         <div className="flex items-end gap-1.5 font-mono text-3xl text-accent">
           ❯
           <span className="inline-block w-[0.55em] h-[1.05em] rounded-[2px] bg-accent/85 animate-[cursor-blink_1.1s_steps(1)_infinite]" />

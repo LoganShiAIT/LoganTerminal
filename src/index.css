@@ -77,6 +77,238 @@ body {
   }
 }
 
+/* ─── Liquid Glass ───────────────────────────────────────────────────────
+   The macOS 26 material, rebuilt for WebKit.
+
+   Apple's glass is three things stacked, and a plain `backdrop-blur` is only
+   the first of them:
+     1. a blurred, saturation-boosted sample of whatever sits behind;
+     2. lensing — light gathers toward the lit edge and falls off across the
+        pane, so the material has a direction instead of being flat;
+     3. a specular rim where the *edge* of the glass catches that light,
+        bright on the side facing it and shaded on the side leaving it.
+   (1) is `backdrop-filter`; (2) is the ::before sheen; (3) is the masked
+   ::after ring. The rim is the detail that decides whether a surface reads
+   as a pane of glass or as a grey box with a blur behind it.
+
+   Rules kept from the HIG:
+     · glass is for the navigation and control layer only — the terminal
+       underneath is content and stays fully opaque and legible;
+     · never stack glass on glass. Controls living inside .lg-chrome use a
+       flat accent tint, not another .lg — see .lg-sticky for the one case
+       that needs a surface of its own;
+     · corner radii nest concentrically: a child inset by N from a surface of
+       radius R takes R − N, so the two curves stay parallel.
+
+   Deliberately not set here: `border-radius` and `background-color` beyond
+   the tint. Tailwind v4 puts its utilities in @layer utilities, so these
+   unlayered rules would win every conflict and silently override a
+   `rounded-2xl` at the call site. Radius stays the call site's business and
+   the pseudo-elements pick it up with `border-radius: inherit`.
+
+   Off switch: html[data-glass="0"], set by the Effects setting — which also
+   folds in the system Reduce Transparency preference. */
+
+:root {
+  /* Regular material, dark themes. Tint carries enough of the panel color
+     that small text stays readable over a busy backdrop. */
+  --lg-tint: color-mix(in srgb, var(--color-panel) 58%, transparent);
+  --lg-blur: 26px;
+  --lg-sat: 180%;
+  --lg-bright: 1.07;
+  /* Rim: bright where the light lands, shaded where it leaves. */
+  --lg-spec: rgba(255, 255, 255, 0.42);
+  --lg-spec-soft: rgba(255, 255, 255, 0.12);
+  --lg-shade: rgba(0, 0, 0, 0.3);
+  /* Lensing wash across the top of the pane. */
+  --lg-sheen: rgba(255, 255, 255, 0.1);
+  --lg-shadow: rgba(0, 0, 0, 0.45);
+}
+
+/* Light themes invert the physics: the backdrop is already bright, so the
+   lift comes from a whiter rim and a softer shadow, not from brightness. */
+html[data-appearance="light"] {
+  --lg-tint: color-mix(in srgb, var(--color-panel) 52%, transparent);
+  --lg-bright: 1.02;
+  --lg-spec: rgba(255, 255, 255, 0.9);
+  --lg-spec-soft: rgba(255, 255, 255, 0.5);
+  --lg-shade: rgba(0, 0, 0, 0.1);
+  --lg-sheen: rgba(255, 255, 255, 0.4);
+  --lg-shadow: rgba(0, 0, 0, 0.16);
+}
+
+.lg {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--lg-tint);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat))
+    brightness(var(--lg-bright));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat))
+    brightness(var(--lg-bright));
+}
+
+.lg::before,
+.lg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Lensing. Sits under the content — .lg always has a stacking context, so
+   the negative z-index stops at the material's own background. */
+.lg::before {
+  z-index: -1;
+  opacity: 0.85;
+  background:
+    radial-gradient(130% 120% at 50% -25%, var(--lg-sheen), transparent 60%),
+    linear-gradient(180deg, var(--lg-spec-soft) 0%, transparent 38%);
+  transition: opacity calc(var(--anim-scale) * 220ms) ease-out;
+}
+
+/* The rim, painted into the 1px border box only: a gradient rectangle with
+   its own middle masked out. */
+.lg::after {
+  padding: 1px;
+  background: linear-gradient(
+    145deg,
+    var(--lg-spec) 0%,
+    var(--lg-spec-soft) 20%,
+    transparent 44%,
+    transparent 60%,
+    var(--lg-shade) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* Attached chrome — header, sidebars. Part of the window rather than
+   floating over it, so: no float shadow, and the rim collapses to the one
+   lit hairline along the top edge. A full ring on a full-bleed bar reads as
+   a mistake. */
+.lg-chrome::after {
+  padding: 0;
+  background: linear-gradient(180deg, var(--lg-spec-soft), transparent 1.5px);
+  -webkit-mask: none;
+  mask: none;
+}
+
+/* Floating sheets — command palette, dialogs, popovers. */
+.lg-panel {
+  --lg-blur: 34px;
+  --lg-tint: color-mix(in srgb, var(--color-raise) 68%, transparent);
+  box-shadow:
+    0 24px 70px var(--lg-shadow),
+    0 2px 10px color-mix(in srgb, var(--lg-shadow) 55%, transparent);
+}
+
+html[data-appearance="light"] .lg-panel {
+  --lg-tint: color-mix(in srgb, var(--color-raise) 62%, transparent);
+}
+
+/* Small floating controls that sit directly over the terminal — search bar,
+   scroll-to-bottom, zoom pill. Denser tint: these overlay text. */
+.lg-control {
+  --lg-blur: 18px;
+  --lg-tint: color-mix(in srgb, var(--color-raise) 82%, transparent);
+  box-shadow: 0 6px 22px var(--lg-shadow);
+}
+
+/* A glass control that fills with the accent on hover. Lives here rather
+   than as `hover:bg-accent` at the call site: .lg's tint is unlayered CSS
+   and beats any Tailwind utility, so the hover would never land. Doubling
+   the class buys the specificity to also outrank the no-glass fallback
+   below, which is otherwise more specific than a bare `.x:hover`. */
+.lg.lg-accent-hover:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 88%, transparent);
+}
+
+/* A bar pinned inside a glass panel (a sticky dialog header). Not glass
+   itself — the HIG forbids stacking the material — just a denser fill of the
+   same tint, so content scrolling underneath can't be read through it. */
+.lg-sticky {
+  background-color: color-mix(in srgb, var(--color-raise) 88%, transparent);
+}
+
+/* Gel response: glass gives slightly under the pointer and springs back.
+   Overshooting ease on the way in, plain squash on press. */
+.lg-interactive {
+  transition:
+    transform calc(var(--anim-scale) * 240ms) cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow calc(var(--anim-scale) * 240ms) ease-out;
+}
+
+.lg-interactive:hover {
+  transform: scale(1.025);
+}
+
+.lg-interactive:hover::before {
+  opacity: 1;
+}
+
+.lg-interactive:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-interactive,
+  .lg-interactive:hover,
+  .lg-interactive:active {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Increase Contrast: pull the tint up until the material is nearly solid and
+   harden the rim into a real border. */
+@media (prefers-contrast: more) {
+  .lg {
+    --lg-tint: color-mix(in srgb, var(--color-panel) 92%, transparent);
+    --lg-spec: rgba(255, 255, 255, 0.7);
+    --lg-spec-soft: rgba(255, 255, 255, 0.35);
+  }
+
+  .lg-panel,
+  .lg-control {
+    --lg-tint: color-mix(in srgb, var(--color-raise) 94%, transparent);
+  }
+}
+
+/* No glass: every surface collapses to a flat fill and the layers go away
+   entirely, rather than being faded down to something still expensive to
+   composite. */
+html[data-glass="0"] .lg {
+  background-color: var(--color-raise);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-glass="0"] .lg-chrome {
+  background-color: var(--color-panel);
+}
+
+html[data-glass="0"] .lg::before {
+  display: none;
+}
+
+/* Rim keeps its 1px geometry from .lg::after — only the gradient flattens
+   into a plain edge color. Chrome drops it: those bars already carry a real
+   `border-b` / `border-r`. */
+html[data-glass="0"] .lg::after {
+  background: var(--color-edge);
+}
+
+html[data-glass="0"] .lg-chrome::after {
+  display: none;
+}
+
 /* Floating glow orbs behind the translucent chrome (header + sidebars). */
 .orb {
   position: absolute;

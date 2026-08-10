@@ -318,6 +318,7 @@ const ZH: Record<string, string> = {
   "Toggle cursor blink": "切换光标闪烁",
   "Toggle ambient motion": "切换背景动效",
   "Toggle CRT mode": "切换 CRT 模式",
+  "Toggle Liquid Glass": "切换液态玻璃",
   "Animation speed: {speed}×": "动画速度：{speed}×",
   "Language: {name}": "语言：{name}",
   Coral: "珊瑚",
@@ -358,6 +359,10 @@ const ZH: Record<string, string> = {
   Snappier: "更利落",
   "Retimes the app's own motion — panel swaps, ambient drift, the header sweep. Terminal output is never delayed.":
     "调整界面自身的动效节奏 —— 面板切换、背景漂移、顶栏扫光。终端输出不受任何影响。",
+  "Liquid Glass — translucent chrome, panels & controls":
+    "液态玻璃 —— 半透明的界面框架、面板与悬浮控件",
+  "Follows the system Reduce Transparency preference, which overrides this":
+    "跟随系统「降低透明度」辅助功能设置——系统开了就以系统为准",
   "Ambient motion — drifting grid & floating glow": "背景动效 —— 漂移网格与浮动光晕",
   "Respects the system reduced-motion preference": "遵循系统的“减弱动态效果”设置",
   "CRT mode — retro scanlines over the terminal": "CRT 模式 —— 终端上的复古扫描线",

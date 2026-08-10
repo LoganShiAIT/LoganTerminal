@@ -287,7 +287,7 @@ function Lightbox({
         }}
         className="max-h-[74vh] max-w-[88vw] rounded-xl border border-edge shadow-[0_24px_90px_rgba(0,0,0,0.6)] animate-[pop-in_0.16s_ease-out] object-contain"
       />
-      <div className="flex items-center gap-2 rounded-xl border border-edge bg-raise/95 backdrop-blur-md px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] animate-[card-in_0.2s_ease-out]">
+      <div className="lg lg-control flex items-center gap-2 rounded-xl px-3 py-2 animate-[card-in_0.2s_ease-out]">
         {data.path && (
           <span
             className="max-w-[280px] truncate font-mono text-[10px] text-faint"

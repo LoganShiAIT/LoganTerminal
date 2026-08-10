@@ -9,9 +9,26 @@ async function freshStore() {
 const scale = () =>
   document.documentElement.style.getPropertyValue("--anim-scale");
 
+const glassAttr = () => document.documentElement.dataset.glass;
+
+/**
+ * Stand in for the OS accessibility preference. jsdom has no matchMedia, and
+ * the store only ever asks the one question, so a stub that answers it is
+ * enough — `reduce` is what "Reduce Transparency" is turned on.
+ */
+function stubReducedTransparency(reduce: boolean) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduce && query.includes("prefers-reduced-transparency"),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
+
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.style.removeProperty("--anim-scale");
+  delete document.documentElement.dataset.glass;
+  vi.unstubAllGlobals();
 });
 
 describe("animation speed", () => {
@@ -50,5 +67,42 @@ describe("animation speed", () => {
     expect(reloaded.useSettingsStore.getState().animSpeed).toBe(
       DEFAULT_ANIM_SPEED,
     );
+  });
+});
+
+describe("liquid glass", () => {
+  it("is on by default and publishes the attribute at import", async () => {
+    stubReducedTransparency(false);
+    const { useSettingsStore } = await freshStore();
+    expect(useSettingsStore.getState().liquidGlass).toBe(true);
+    expect(glassAttr()).toBe("1");
+  });
+
+  it("flips the attribute and persists the choice", async () => {
+    stubReducedTransparency(false);
+    const first = await freshStore();
+    first.useSettingsStore.getState().toggleLiquidGlass();
+    expect(glassAttr()).toBe("0");
+    expect(localStorage.getItem("logan.liquidGlass")).toBe("0");
+
+    const second = await freshStore();
+    expect(second.useSettingsStore.getState().liquidGlass).toBe(false);
+    expect(glassAttr()).toBe("0");
+  });
+
+  it("lets the system Reduce Transparency preference win", async () => {
+    stubReducedTransparency(true);
+    const { useSettingsStore } = await freshStore();
+    // The user's own choice is untouched — only the rendered material is off,
+    // so clearing the system preference restores the glass they picked.
+    expect(useSettingsStore.getState().liquidGlass).toBe(true);
+    expect(glassAttr()).toBe("0");
+  });
+
+  it("assumes no preference when matchMedia is unavailable", async () => {
+    vi.stubGlobal("matchMedia", undefined);
+    const { useSettingsStore } = await freshStore();
+    expect(useSettingsStore.getState().liquidGlass).toBe(true);
+    expect(glassAttr()).toBe("1");
   });
 });

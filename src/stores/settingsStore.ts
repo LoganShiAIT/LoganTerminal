@@ -30,6 +30,7 @@ const CURSOR_STYLE_KEY = "logan.cursorStyle";
 const CURSOR_BLINK_KEY = "logan.cursorBlink";
 const AMBIENT_KEY = "logan.ambientMotion";
 const CRT_KEY = "logan.crt";
+const GLASS_KEY = "logan.liquidGlass";
 const NOTIFY_LONG_KEY = "logan.notifyLongCmds";
 const NOTIFY_BELL_KEY = "logan.notifyBell";
 const FLEET_CMD_KEY = "logan.fleetCommand";
@@ -72,6 +73,25 @@ function applyAmbientAttr(on: boolean) {
   document.documentElement.dataset.ambient = on ? "1" : "0";
 }
 
+const REDUCED_TRANSPARENCY = "(prefers-reduced-transparency: reduce)";
+
+function reducedTransparency(): boolean {
+  return window.matchMedia?.(REDUCED_TRANSPARENCY)?.matches ?? false;
+}
+
+/**
+ * The Liquid Glass material is pure CSS, keyed off this html attribute.
+ *
+ * The system's Reduce Transparency preference is folded in here rather than
+ * mirrored as a media query in index.css: one attribute means one "no glass"
+ * code path, and the accessibility setting can't drift out of sync with the
+ * app's own switch. Whichever says no, wins.
+ */
+function applyGlassAttr(on: boolean) {
+  document.documentElement.dataset.glass =
+    on && !reducedTransparency() ? "1" : "0";
+}
+
 function loadAnimSpeed(): number {
   const n = Number(localStorage.getItem(ANIM_SPEED_KEY));
   return (ANIM_SPEEDS as readonly number[]).includes(n) ? n : DEFAULT_ANIM_SPEED;
@@ -100,6 +120,12 @@ interface SettingsStore {
   ambientMotion: boolean;
   /** Retro scanline overlay on the terminal area. */
   crtMode: boolean;
+  /**
+   * Liquid Glass material on the chrome, panels and floating controls.
+   * Reflects the user's choice — the material can still be off while this is
+   * true if the system asks for reduced transparency.
+   */
+  liquidGlass: boolean;
   /** Playback rate for the app's own animations — see [`ANIM_SPEEDS`]. */
   animSpeed: number;
   /** Desktop toast when a long command finishes out of view (OSC 133). */
@@ -127,6 +153,7 @@ interface SettingsStore {
   toggleCursorBlink: () => void;
   toggleAmbientMotion: () => void;
   toggleCrtMode: () => void;
+  toggleLiquidGlass: () => void;
   setAnimSpeed: (speed: number) => void;
   toggleNotifyLongCommands: () => void;
   toggleNotifyBell: () => void;
@@ -146,6 +173,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   cursorBlink: loadBool(CURSOR_BLINK_KEY, true),
   ambientMotion: loadBool(AMBIENT_KEY, true),
   crtMode: loadBool(CRT_KEY, false),
+  liquidGlass: loadBool(GLASS_KEY, true),
   animSpeed: loadAnimSpeed(),
   notifyLongCommands: loadBool(NOTIFY_LONG_KEY, true),
   notifyBell: loadBool(NOTIFY_BELL_KEY, true),
@@ -206,6 +234,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     localStorage.setItem(CRT_KEY, next ? "1" : "0");
     set({ crtMode: next });
   },
+  toggleLiquidGlass: () => {
+    const next = !get().liquidGlass;
+    localStorage.setItem(GLASS_KEY, next ? "1" : "0");
+    applyGlassAttr(next);
+    set({ liquidGlass: next });
+  },
   setAnimSpeed: (speed) => {
     const next = (ANIM_SPEEDS as readonly number[]).includes(speed)
       ? speed
@@ -248,4 +282,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   applyTheme(getTheme(s.themeId), s.accentOverride);
   applyAmbientAttr(s.ambientMotion);
   applyAnimScale(s.animSpeed);
+  applyGlassAttr(s.liquidGlass);
 }
+
+// Reduce Transparency is toggled live in System Settings — follow it without
+// touching the user's own glass choice, so turning it back off restores it.
+window
+  .matchMedia?.(REDUCED_TRANSPARENCY)
+  ?.addEventListener?.("change", () =>
+    applyGlassAttr(useSettingsStore.getState().liquidGlass),
+  );

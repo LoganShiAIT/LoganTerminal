@@ -176,7 +176,7 @@ export default function WorktreeModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="w-[560px] max-w-[94vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[560px] max-w-[94vw] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-11 px-4 border-b border-edge">
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
             {t("Worktrees")}
