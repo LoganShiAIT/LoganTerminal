@@ -28,6 +28,14 @@ import { t } from "../../i18n";
 
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
+/**
+ * Silence after which a pane counts as idle again. Generous on purpose: a
+ * working agent CLI redraws its spinner every ~100ms, but one stuck in a
+ * long tool call may only tick its elapsed counter once a second.
+ */
+const BUSY_IDLE_MS = 1_500;
+/** Output this soon after a keystroke is assumed to be its echo, not work. */
+const ECHO_WINDOW_MS = 250;
 const BRACKETED_PASTE_START = "\x1b[200~";
 const BRACKETED_PASTE_END = "\x1b[201~";
 
@@ -181,6 +189,33 @@ export default function Terminal({
       usePtyStore.getState().setPaneTitle(paneId, title.trim() || null);
     });
 
+    // Busy tracking: an agent CLI streams output while it works and falls
+    // silent once it's waiting on the user, so sustained pty output — minus
+    // keystroke echo — is the "a task is running here" signal. Chrome that
+    // animates on a running agent (the header hairline) reads this flag,
+    // which is why merely opening a CLI must not raise it.
+    let busy = false;
+    let busyTimer: number | null = null;
+    let lastInputAt = 0;
+    const setBusy = (next: boolean) => {
+      if (busy === next) return;
+      busy = next;
+      usePtyStore.getState().setPaneBusy(paneId, next);
+    };
+    const keepBusy = () => {
+      setBusy(true);
+      if (busyTimer !== null) window.clearTimeout(busyTimer);
+      busyTimer = window.setTimeout(() => {
+        busyTimer = null;
+        setBusy(false);
+      }, BUSY_IDLE_MS);
+    };
+    const clearBusy = () => {
+      if (busyTimer !== null) window.clearTimeout(busyTimer);
+      busyTimer = null;
+      setBusy(false);
+    };
+
     // Every `pty://…` subscription for the current session, torn down as one
     // unit — a missed handle here outlives the component and keeps writing
     // into a disposed terminal.
@@ -211,12 +246,15 @@ export default function Terminal({
           sessionId = id;
           unlistenAll.push(await listen<string>(`pty://data/${id}`, (e) => {
             term.write(e.payload);
+            // Echo of what the user just typed isn't work being done.
+            if (Date.now() - lastInputAt >= ECHO_WINDOW_MS) keepBusy();
             // Store no-ops when this pane is the one being watched.
             usePtyStore.getState().markUnread(tabId, paneId);
           }));
           unlistenAll.push(await listen(`pty://exit/${id}`, () => {
             term.writeln(`\r\n\x1b[31m${t("[process exited]")}\x1b[0m`);
             exited = true;
+            clearBusy();
             const store = usePtyStore.getState();
             store.markPaneExited(paneId);
             store.markUnread(tabId, paneId);
@@ -281,6 +319,10 @@ export default function Terminal({
           term.onData((data) => {
             if (!sessionId || exited) return;
             const sentAt = submitsPrompt(data) ? Date.now() : null;
+            lastInputAt = Date.now();
+            // Submitting starts the run: light up now rather than waiting
+            // for the agent's first frame to clear the echo window.
+            if (sentAt !== null) keepBusy();
             const store = usePtyStore.getState();
             const tab = store.tabs.find((t) => t.id === tabId);
             const activeLeaf = tab ? findLeaf(tab.root, paneId) : undefined;
@@ -442,6 +484,7 @@ export default function Terminal({
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
+      clearBusy();
       unlistenSession();
       if (sessionId && !exited) {
         invoke("pty_kill", { sessionId });

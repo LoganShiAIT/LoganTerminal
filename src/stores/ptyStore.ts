@@ -55,6 +55,13 @@ export interface LeafPane {
    * watched.
    */
   attention: boolean;
+  /**
+   * The pane is producing sustained output right now — i.e. something is
+   * actually running in it. Driven by pty data in Terminal.tsx (keystroke
+   * echo excluded) and cleared after a short silence, so an agent CLI that
+   * merely sits at its prompt reads as idle. Session-only, never persisted.
+   */
+  busy: boolean;
 }
 
 export interface SplitPane {
@@ -115,6 +122,7 @@ function makeLeaf(
     lastDurationMs: null,
     unread: false,
     attention: false,
+    busy: false,
   };
 }
 
@@ -277,6 +285,8 @@ interface PtyStore {
     code: number | null,
     durationMs: number | null,
   ) => void;
+  /** Flip a pane's "something is running here" flag; see LeafPane.busy. */
+  setPaneBusy: (paneId: string, busy: boolean) => void;
   markUnread: (tabId: string, paneId: string) => void;
   /** Strong needs-a-human signal (bell / long command done); see LeafPane.attention. */
   markAttention: (tabId: string, paneId: string) => void;
@@ -630,6 +640,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
           : { ...l, lastExitCode, lastDurationMs },
       ),
 
+    setPaneBusy: (paneId, busy) =>
+      updatePane(paneId, (l) => (l.busy === busy ? l : { ...l, busy })),
+
     markUnread: (tabId, paneId) =>
       set((s) => {
         const tabIdx = s.tabs.findIndex((t) => t.id === tabId);
@@ -690,7 +703,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       })),
 
     markPaneExited: (paneId) =>
-      updatePane(paneId, (l) => ({ ...l, exited: true })),
+      updatePane(paneId, (l) => ({ ...l, exited: true, busy: false })),
 
     setDropPaths: (paths) => set({ dropPaths: paths }),
   };

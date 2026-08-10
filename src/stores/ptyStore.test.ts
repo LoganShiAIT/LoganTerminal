@@ -401,13 +401,35 @@ describe("pane field updates", () => {
     expect(m.firstLeaf(st().tabs[0].root)).toBe(before);
   });
 
-  it("markPaneExited and toggleBroadcast flip their flags", async () => {
+  it("setPaneBusy flips only the target pane and no-ops when unchanged", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    st().splitPane("row");
+    const [l0, l1] = m.collectLeaves(st().tabs[0].root);
+    expect(l0.busy).toBe(false);
+
+    st().setPaneBusy(l0.id, true);
+    const [n0, n1] = m.collectLeaves(st().tabs[0].root);
+    expect(n0.busy).toBe(true);
+    expect(n1.busy).toBe(false);
+
+    st().setPaneBusy(l0.id, true); // identical -> same leaf object
+    expect(m.collectLeaves(st().tabs[0].root)[0]).toBe(n0);
+
+    st().setPaneBusy(l0.id, false);
+    expect(m.collectLeaves(st().tabs[0].root)[0].busy).toBe(false);
+    expect(l1).toBe(n1);
+  });
+
+  it("markPaneExited clears busy, and toggleBroadcast flips its flag", async () => {
     const m = await fresh();
     const st = () => m.usePtyStore.getState();
     const tab = st().tabs[0];
 
+    st().setPaneBusy(tab.activePaneId, true);
     st().markPaneExited(tab.activePaneId);
     expect(m.firstLeaf(st().tabs[0].root).exited).toBe(true);
+    expect(m.firstLeaf(st().tabs[0].root).busy).toBe(false);
 
     st().toggleBroadcast(tab.id);
     expect(st().tabs[0].broadcast).toBe(true);

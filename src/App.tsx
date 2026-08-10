@@ -266,17 +266,23 @@ function CrtOverlay() {
   return <div className="crt-overlay" aria-hidden />;
 }
 
-/** Hairline under the header; sweeps with light while an agent is running. */
+/**
+ * Hairline under the header; sweeps with light only while an agent is
+ * actually working (LeafPane.busy). An agent sitting idle at its prompt
+ * leaves the hairline static — the motion means "a task is running".
+ */
 function AgentHairline() {
   const activeTab = useActiveTab();
-  const agentLive = activeTab
-    ? collectLeaves(activeTab.root).some((l) => l.agentName && !l.exited)
+  const agentBusy = activeTab
+    ? collectLeaves(activeTab.root).some(
+        (l) => l.agentName && !l.exited && l.busy,
+      )
     : false;
   return (
     <span
       aria-hidden
       className={`pointer-events-none absolute inset-x-0 -bottom-px ${
-        agentLive ? "h-[2px] agent-shimmer" : "h-px header-hairline"
+        agentBusy ? "h-[2px] agent-shimmer" : "h-px header-hairline"
       }`}
     />
   );

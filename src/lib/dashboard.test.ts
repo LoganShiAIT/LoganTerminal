@@ -21,6 +21,7 @@ function leaf(overrides: Partial<LeafPane> = {}): LeafPane {
     lastDurationMs: null,
     unread: false,
     attention: false,
+    busy: false,
     ...overrides,
   };
 }
