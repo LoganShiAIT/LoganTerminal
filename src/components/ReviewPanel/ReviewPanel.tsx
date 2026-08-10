@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
@@ -8,11 +8,16 @@ import {
 } from "../../stores/reviewStore";
 import { useActivePane } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { basename, joinPath } from "../../lib/paths";
+import { REVIEW_LIST_DEFAULT, useUiStore } from "../../stores/uiStore";
+import { basename, isMarkdownPath, joinPath } from "../../lib/paths";
 import { shellEscapePath } from "../../lib/shellEscape";
+import MarkdownPreview from "../MarkdownPreview/MarkdownPreview";
 import { t, useT } from "../../i18n";
 
 const MAX_DIRECT_READ_BYTES = 1024 * 1024;
+
+/** Room the reviewer keeps below the divider, however far it is dragged. */
+const MIN_CONTENT_HEIGHT = 160;
 
 interface FsEntry {
   name: string;
@@ -40,7 +45,17 @@ export default function ReviewPanel() {
   const [draft, setDraft] = useState("");
   const [state, setState] = useState<LoadState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
   const dirty = draft !== content;
+  const listHeight = useUiStore((s) => s.reviewListHeight);
+  const setListHeight = useUiStore((s) => s.setReviewListHeight);
+  const splitRef = useRef<HTMLDivElement>(null);
+
+  // Markdown opens rendered — an agent's report is meant to be read, not
+  // diffed. Anything else opens in the editor; the toggle covers both ways.
+  useEffect(() => {
+    setPreview(selectedPath !== null && isMarkdownPath(selectedPath));
+  }, [selectedPath]);
 
   useEffect(() => {
     if (!selectedPath) {
@@ -104,6 +119,29 @@ export default function ReviewPanel() {
 
   const selectedName = info?.name ?? (selectedPath ? basename(selectedPath) : "");
 
+  // Dragging sets the height from the pointer's absolute position rather than
+  // a delta, so hitting a clamp never leaves the divider drifting behind the
+  // cursor — it re-attaches the moment you drag back.
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const rect = splitRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const onMove = (move: MouseEvent) => {
+      const max = rect.height - MIN_CONTENT_HEIGHT;
+      setListHeight(Math.min(move.clientY - rect.top, max));
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   const insertPath = async () => {
     if (!activeSessionId || !selectedPath) return;
     const escaped = await shellEscapePath(selectedPath);
@@ -135,8 +173,13 @@ export default function ReviewPanel() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 grid grid-rows-[minmax(120px,38%)_1fr]">
-        <div className="min-h-0 border-b border-edge overflow-y-auto p-2">
+      <div ref={splitRef} className="flex min-h-0 flex-1 flex-col">
+        <div
+          // maxHeight, not a clamp on the stored value: a height persisted
+          // from a tall window must not swallow the reader in a short one.
+          style={{ height: listHeight, maxHeight: "70%" }}
+          className="min-h-0 shrink-0 overflow-y-auto p-2"
+        >
           {attachments.length === 0 ? (
             <Placeholder />
           ) : (
@@ -153,7 +196,16 @@ export default function ReviewPanel() {
           )}
         </div>
 
-        <div className="min-h-0 flex flex-col">
+        <div
+          className="group relative h-1.5 shrink-0 cursor-row-resize"
+          onMouseDown={startDrag}
+          onDoubleClick={() => setListHeight(REVIEW_LIST_DEFAULT)}
+          title={t("Drag to resize · double-click to reset")}
+        >
+          <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-edge transition-colors group-hover:bg-accent/70" />
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-edge p-2 shrink-0">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -183,13 +235,29 @@ export default function ReviewPanel() {
               >
                 {t("Copy Path")}
               </PanelButton>
+              <PanelButton
+                disabled={state !== "ready"}
+                onClick={() => setPreview((v) => !v)}
+                title={preview ? t("Edit the source text") : t("Render as markdown")}
+              >
+                {preview ? t("Source") : t("Preview")}
+              </PanelButton>
               <PanelButton disabled={!dirty || state !== "ready"} onClick={save}>
                 {t("Save")}
               </PanelButton>
             </div>
           </div>
 
-          {state === "ready" ? (
+          {state === "ready" && preview ? (
+            // The draft, not the saved text: edits show up in the preview.
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              {draft.trim() ? (
+                <MarkdownPreview source={draft} />
+              ) : (
+                <div className="text-[11px] text-faint">{t("empty")}</div>
+              )}
+            </div>
+          ) : state === "ready" ? (
             <textarea
               className="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-[12px] leading-relaxed text-ink outline-none"
               spellCheck={false}
@@ -406,10 +474,12 @@ function PathRow({
 function PanelButton({
   disabled,
   onClick,
+  title,
   children,
 }: {
   disabled?: boolean;
   onClick: () => void;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -417,6 +487,7 @@ function PanelButton({
       className="h-7 rounded-md border border-edge px-2 text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
       disabled={disabled}
       onClick={onClick}
+      title={title}
     >
       {children}
     </button>

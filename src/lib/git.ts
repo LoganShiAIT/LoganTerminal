@@ -24,6 +24,8 @@ export interface DiffSummary {
   files: DiffFile[];
   /** Branch mode: the base branch the range diffs against. Working: null. */
   base: string | null;
+  /** Worktree root each `path` is relative to — join them to open a file. */
+  root: string;
 }
 
 /**
@@ -31,6 +33,29 @@ export interface DiffSummary {
  * "branch" = commits ahead of the main worktree's branch (merge-base range).
  */
 export type DiffMode = "working" | "branch";
+
+/** What the diff panel is showing — the two diff modes plus the history. */
+export type DiffView = DiffMode | "log";
+
+export interface Commit {
+  hash: string;
+  short: string;
+  /** Full hashes, first parent first — the graph lanes depend on the order. */
+  parents: string[];
+  author: string;
+  /** Author date, unix seconds. */
+  timestamp: number;
+  /** Decorations git prints here: `HEAD -> main`, `tag: v1`, … */
+  refs: string[];
+  subject: string;
+  /** Reachable from HEAD but not from the base branch. */
+  ahead: boolean;
+}
+
+export interface CommitLog {
+  commits: Commit[];
+  base: string | null;
+}
 
 export function dirtyTotal(d: GitDirty | null | undefined): number {
   return d ? d.added + d.modified + d.deleted : 0;

@@ -39,6 +39,20 @@ export function dirLabel(path: string): string {
   return basename(path) || "/";
 }
 
+/** Extensions the review panel opens in rendered form by default. */
+const MARKDOWN_EXTS = ["md", "markdown", "mdown", "mkd", "mdx"];
+
+/**
+ * Does this path look like a markdown document? Extension only — the review
+ * panel uses it to pick a default view, not to decide what it may render, so
+ * a wrong guess costs one click on the source/preview toggle.
+ */
+export function isMarkdownPath(path: string): boolean {
+  const name = basename(path).toLowerCase();
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && MARKDOWN_EXTS.includes(name.slice(dot + 1));
+}
+
 export function joinPath(base: string, name: string): string {
   const sep = sepOf(base);
   return base.endsWith(sep) ? base + name : base + sep + name;

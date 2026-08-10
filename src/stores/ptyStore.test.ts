@@ -370,21 +370,59 @@ describe("unread and attention", () => {
 });
 
 describe("pane field updates", () => {
-  it("markPromptSent stamps only the target pane", async () => {
+  it("markAgentIdle stamps only the target pane", async () => {
     const m = await fresh();
     const st = () => m.usePtyStore.getState();
     st().splitPane("row");
     const [l0, l1] = m.collectLeaves(st().tabs[0].root);
 
-    st().markPromptSent(l0.id, 12345);
+    st().markAgentIdle(l0.id, 12345);
     const [n0, n1] = m.collectLeaves(st().tabs[0].root);
-    expect(n0.lastPromptSentAt).toBe(12345);
-    expect(n1.lastPromptSentAt).toBeNull();
+    expect(n0.agentIdleSinceAt).toBe(12345);
+    expect(n1.agentIdleSinceAt).toBeNull();
 
-    st().markPromptSent(l1.id); // default arg = now
+    st().markAgentIdle(l1.id); // default arg = now
     expect(
-      m.collectLeaves(st().tabs[0].root)[1].lastPromptSentAt,
+      m.collectLeaves(st().tabs[0].root)[1].agentIdleSinceAt,
     ).toBeTypeOf("number");
+  });
+
+  it("the idle timer runs on the user's turn, not the agent's", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    const paneId = st().tabs[0].activePaneId;
+    const leaf = () => m.firstLeaf(st().tabs[0].root);
+
+    // A plain shell going quiet is nobody waiting on the user.
+    st().setPaneBusy(paneId, true, 100);
+    st().setPaneBusy(paneId, false, 200);
+    expect(leaf().agentIdleSinceAt).toBeNull();
+
+    // Detection on an already-quiet pane starts the clock itself.
+    st().setAgentName(paneId, "claude", 300);
+    expect(leaf().agentIdleSinceAt).toBe(300);
+
+    // Work resuming stops it; falling silent again restarts it.
+    st().setPaneBusy(paneId, true, 400);
+    expect(leaf().agentIdleSinceAt).toBeNull();
+    st().setPaneBusy(paneId, false, 900);
+    expect(leaf().agentIdleSinceAt).toBe(900);
+
+    // Losing the agent (back to a bare shell) clears it.
+    st().setAgentName(paneId, null, 1000);
+    expect(leaf().agentIdleSinceAt).toBeNull();
+  });
+
+  it("an exited pane's idle timer stops moving", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    const paneId = st().tabs[0].activePaneId;
+
+    st().setAgentName(paneId, "claude", 100);
+    st().setPaneBusy(paneId, true, 200);
+    st().markPaneExited(paneId);
+    st().setPaneBusy(paneId, false, 300);
+    expect(m.firstLeaf(st().tabs[0].root).agentIdleSinceAt).toBeNull();
   });
 
   it("setCommandResult stores results and preserves leaf identity on no-ops", async () => {

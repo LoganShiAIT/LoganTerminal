@@ -10,7 +10,7 @@ function leaf(overrides: Partial<LeafPane> = {}): LeafPane {
     sessionId: "s",
     cwd: null,
     agentName: null,
-    lastPromptSentAt: null,
+    agentIdleSinceAt: null,
     title: null,
     initialCwd: null,
     gitBranch: null,
@@ -84,14 +84,14 @@ describe("dashboardRows", () => {
       initialCwd: "/init",
       gitBranch: "feature/x",
       gitDirty: { added: 2, modified: 1, deleted: 0 },
-      lastPromptSentAt: 123,
+      agentIdleSinceAt: 123,
       title: "claude — repl",
     });
     const rows = dashboardRows([tab(l)], null);
     expect(rows[0].cwd).toBe("/live");
     expect(rows[0].gitBranch).toBe("feature/x");
     expect(rows[0].gitDirty).toEqual({ added: 2, modified: 1, deleted: 0 });
-    expect(rows[0].lastPromptSentAt).toBe(123);
+    expect(rows[0].agentIdleSinceAt).toBe(123);
     expect(rows[0].title).toBe("claude — repl");
 
     const fallback = dashboardRows([tab(leaf({ initialCwd: "/init" }))], null);

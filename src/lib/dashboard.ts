@@ -23,7 +23,8 @@ export interface DashboardRow {
   /** Uncommitted-change counts — surfaces which agents touched files. */
   gitDirty: GitDirty | null;
   unread: boolean;
-  lastPromptSentAt: number | null;
+  /** When this pane's agent last went idle; see LeafPane.agentIdleSinceAt. */
+  agentIdleSinceAt: number | null;
   /** This pane is its tab's focused pane. */
   focused: boolean;
   /** ...and that tab is the active one (i.e. the pane being watched now). */
@@ -57,7 +58,7 @@ export function dashboardRows(
         gitBranch: leaf.gitBranch,
         gitDirty: leaf.gitDirty,
         unread: leaf.unread,
-        lastPromptSentAt: leaf.lastPromptSentAt,
+        agentIdleSinceAt: leaf.agentIdleSinceAt,
         focused,
         watched: focused && tab.id === activeTabId,
       });

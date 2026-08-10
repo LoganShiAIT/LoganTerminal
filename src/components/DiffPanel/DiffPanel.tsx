@@ -3,23 +3,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { useActivePane } from "../../stores/ptyStore";
 import { useUiStore } from "../../stores/uiStore";
 import {
-  classifyDiffLine,
   dirtyTotal,
+  type CommitLog as Log,
   type DiffFile,
-  type DiffLineKind,
-  type DiffMode,
   type DiffSummary,
+  type DiffView,
 } from "../../lib/git";
-import { basename } from "../../lib/paths";
+import DiffFileTree from "./DiffFileTree";
+import CommitLog from "./CommitLog";
 import { useT } from "../../i18n";
 
-const LINE_CLASS: Record<DiffLineKind, string> = {
-  add: "text-emerald-300 bg-emerald-500/[0.07]",
-  del: "text-red-300 bg-red-500/[0.07]",
-  hunk: "text-accent/90 bg-accent/[0.06]",
-  meta: "text-faint",
-  ctx: "text-muted",
-};
+/** How far back the history view reads. Deep enough to see a fork, cheap. */
+const LOG_LIMIT = 120;
 
 function RefreshIcon() {
   return (
@@ -39,36 +34,13 @@ function RefreshIcon() {
   );
 }
 
-function Patch({ text }: { text: string }) {
-  const t = useT();
-  if (!text.trim()) {
-    return (
-      <div className="px-3 py-2 text-[10px] text-faint">
-        {t("No textual changes (empty or binary file).")}
-      </div>
-    );
-  }
-  return (
-    <pre className="overflow-x-auto px-1 py-1 font-mono text-[10px] leading-[1.5]">
-      {text.split("\n").map((line, i) => (
-        <div
-          key={i}
-          className={`px-2 whitespace-pre ${LINE_CLASS[classifyDiffLine(line)]}`}
-        >
-          {line || " "}
-        </div>
-      ))}
-    </pre>
-  );
-}
-
 /**
- * Git diff review panel: what changed in the active pane's repository.
+ * Git review panel for the active pane's repository, in three views:
  * "Changes" = uncommitted work vs HEAD plus untracked files; "vs <base>" =
- * commits this branch carries beyond the main worktree's branch — the
- * review surface for ⌘⇧N agent worktrees. Auto-refreshes on every prompt
- * (the same OSC 7 tick that refreshes the branch chip), skipped while the
- * sidebar is hidden.
+ * what this branch carries beyond the main worktree's branch (the review
+ * surface for ⌘⇧N agent worktrees); "History" = the commit graph behind them.
+ * Auto-refreshes on every prompt (the same OSC 7 tick that refreshes the
+ * branch chip), skipped while the sidebar is hidden.
  */
 export default function DiffPanel() {
   const t = useT();
@@ -78,12 +50,13 @@ export default function DiffPanel() {
   const branch = pane?.gitBranch ?? null;
   const dirty = pane?.gitDirty ?? null;
 
-  const [mode, setMode] = useState<DiffMode>("working");
+  const [view, setView] = useState<DiffView>("working");
   const [summary, setSummary] = useState<DiffSummary | null>(null);
+  const [log, setLog] = useState<Log | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openPath, setOpenPath] = useState<string | null>(null);
-  const [patch, setPatch] = useState<string | null>(null);
-  const [patchError, setPatchError] = useState<string | null>(null);
+  // Bumped by every successful load: the open patch refetches with it, since
+  // the commit or worktree state underneath it may have moved.
+  const [tick, setTick] = useState(0);
 
   // Every prompt bumps this signature via the pane's gitDirty refresh — the
   // cheap way to know "something may have changed on disk".
@@ -91,27 +64,36 @@ export default function DiffPanel() {
     ? `${dirty.added}/${dirty.modified}/${dirty.deleted}`
     : "clean";
 
-  // Guards against an older, slower summary resolving after a newer one
-  // (pane switch or mode flip while a big diff is still being computed).
+  // Guards against an older, slower load resolving after a newer one (pane
+  // switch or view flip while a big diff is still being computed).
   const loadSeq = useRef(0);
   const load = useCallback(async () => {
     if (!cwd) {
       setSummary(null);
+      setLog(null);
       setError(null);
       return;
     }
     const seq = ++loadSeq.current;
     try {
-      const s = await invoke<DiffSummary>("git_diff_summary", { cwd, mode });
-      if (loadSeq.current !== seq) return;
-      setSummary(s);
+      if (view === "log") {
+        const l = await invoke<Log>("git_log", { cwd, limit: LOG_LIMIT });
+        if (loadSeq.current !== seq) return;
+        setLog(l);
+      } else {
+        const s = await invoke<DiffSummary>("git_diff_summary", { cwd, mode: view });
+        if (loadSeq.current !== seq) return;
+        setSummary(s);
+      }
       setError(null);
+      setTick((n) => n + 1);
     } catch (e) {
       if (loadSeq.current !== seq) return;
       setSummary(null);
+      setLog(null);
       setError(String(e));
     }
-  }, [cwd, mode]);
+  }, [cwd, view]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -119,69 +101,56 @@ export default function DiffPanel() {
     // dirtySig/branch aren't read by load(); they're the refresh triggers.
   }, [load, sidebarOpen, dirtySig, branch]);
 
-  // The open file's patch loads on selection and reloads with each summary
-  // (same DOM node stays mounted, so scroll position survives the swap).
-  useEffect(() => {
-    if (!openPath || !cwd) {
-      setPatch(null);
-      setPatchError(null);
-      return;
-    }
-    if (!summary) return;
-    const file = summary.files.find((f) => f.path === openPath);
-    if (!file) {
-      // Committed/cleaned away since selection.
-      setOpenPath(null);
-      return;
-    }
-    let cancelled = false;
-    invoke<string>("git_diff_file", {
-      cwd,
-      mode,
-      path: file.path,
-      untracked: file.untracked,
-    })
-      .then((p) => {
-        if (cancelled) return;
-        setPatch(p);
-        setPatchError(null);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setPatch(null);
-        setPatchError(String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [openPath, cwd, mode, summary]);
-
-  // Pane hopped to another directory: keep the panel but drop the selection.
-  useEffect(() => {
-    setOpenPath(null);
-  }, [cwd]);
+  const loadPatch = useCallback(
+    (file: DiffFile) =>
+      invoke<string>("git_diff_file", {
+        cwd,
+        mode: view,
+        path: file.path,
+        untracked: file.untracked,
+      }),
+    [cwd, view],
+  );
 
   const segBtn = (active: boolean) =>
-    `h-full flex-1 rounded-md text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+    `h-full min-w-0 flex-1 truncate rounded-md px-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors ${
       active ? "text-accent bg-accent/15 border border-accent/30" : "text-muted hover:text-ink"
     }`;
 
-  const fileStat = (f: DiffFile) => {
-    if (f.untracked) {
-      return <span className="text-emerald-300/90 text-[9px] uppercase">new</span>;
+  const empty = (message: string) => (
+    <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[11px] leading-relaxed text-faint">
+      {message}
+    </div>
+  );
+
+  const body = () => {
+    if (!cwd) return empty(t("No active shell directory yet."));
+    if (error) {
+      return (
+        <div className="rounded-lg border border-dashed border-edge px-3 py-3 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-faint">
+          {error}
+        </div>
+      );
     }
-    if (f.additions === null && f.deletions === null) {
-      return <span className="text-faint text-[9px] uppercase">bin</span>;
+    if (view === "log") {
+      return log && <CommitLog key={cwd} cwd={cwd} log={log} />;
+    }
+    if (!summary) return null;
+    if (summary.files.length === 0) {
+      return empty(
+        view === "working"
+          ? t("Working tree clean — nothing uncommitted.")
+          : t("No commits beyond {base}.", { base: summary.base ?? t("the base branch") }),
+      );
     }
     return (
-      <>
-        {(f.additions ?? 0) > 0 && (
-          <span className="text-emerald-300/90">+{f.additions}</span>
-        )}
-        {(f.deletions ?? 0) > 0 && (
-          <span className="text-red-300/90">−{f.deletions}</span>
-        )}
-      </>
+      <DiffFileTree
+        key={`${cwd}:${view}`}
+        files={summary.files}
+        root={summary.root}
+        loadPatch={loadPatch}
+        reloadKey={tick}
+      />
     );
   };
 
@@ -189,11 +158,14 @@ export default function DiffPanel() {
     <div className="flex h-full flex-col">
       <div className="shrink-0 space-y-2 border-b border-edge p-2">
         <div className="flex h-7 items-center gap-1 rounded-lg bg-ink/[0.05] p-0.5">
-          <button className={segBtn(mode === "working")} onClick={() => setMode("working")}>
+          <button className={segBtn(view === "working")} onClick={() => setView("working")}>
             {t("Changes")}
           </button>
-          <button className={segBtn(mode === "branch")} onClick={() => setMode("branch")}>
-            {t("vs {base}", { base: summary?.base ?? "main" })}
+          <button className={segBtn(view === "branch")} onClick={() => setView("branch")}>
+            {t("vs {base}", { base: summary?.base ?? log?.base ?? "main" })}
+          </button>
+          <button className={segBtn(view === "log")} onClick={() => setView("log")}>
+            {t("History")}
           </button>
           <button
             className="grid h-full w-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:text-accent"
@@ -217,69 +189,7 @@ export default function DiffPanel() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {!cwd ? (
-          <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[11px] leading-relaxed text-faint">
-            {t("No active shell directory yet.")}
-          </div>
-        ) : error ? (
-          <div className="rounded-lg border border-dashed border-edge px-3 py-3 font-mono text-[10px] leading-relaxed text-faint whitespace-pre-wrap break-all">
-            {error}
-          </div>
-        ) : !summary ? null : summary.files.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[11px] leading-relaxed text-faint">
-            {mode === "working"
-              ? t("Working tree clean — nothing uncommitted.")
-              : t("No commits beyond {base}.", {
-                  base: summary.base ?? t("the base branch"),
-                })}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {summary.files.map((f) => {
-              const open = f.path === openPath;
-              const dir = f.path.includes("/")
-                ? f.path.slice(0, f.path.length - basename(f.path).length)
-                : "";
-              return (
-                <div
-                  key={`${f.untracked ? "u:" : ""}${f.path}`}
-                  className={`overflow-hidden rounded-lg border transition-colors ${
-                    open ? "border-accent/30 bg-ink/[0.03]" : "border-edge bg-ink/[0.03]"
-                  }`}
-                >
-                  <button
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-ink/[0.04]"
-                    onClick={() => setOpenPath(open ? null : f.path)}
-                    title={f.path}
-                  >
-                    <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                      {dir && <span className="text-faint">{dir}</span>}
-                      <span className="text-ink">{basename(f.path)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px]">
-                      {fileStat(f)}
-                    </span>
-                  </button>
-                  {open && (
-                    <div className="border-t border-edge">
-                      {patchError ? (
-                        <div className="px-3 py-2 font-mono text-[10px] text-red-300 whitespace-pre-wrap break-all">
-                          {patchError}
-                        </div>
-                      ) : patch === null ? (
-                        <div className="px-3 py-2 text-[10px] text-faint">Loading…</div>
-                      ) : (
-                        <Patch text={patch} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">{body()}</div>
     </div>
   );
 }

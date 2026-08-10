@@ -4,6 +4,8 @@ import {
   MIN_FONT_SIZE,
   MAX_FONT_SIZE,
   DEFAULT_FONT_SIZE,
+  ANIM_SPEEDS,
+  DEFAULT_ANIM_SPEED,
   type CursorStyle,
   type Locale,
 } from "../../stores/settingsStore";
@@ -473,6 +475,7 @@ function EffectsSection() {
   return (
     <div>
       <SectionLabel>{t("Effects")}</SectionLabel>
+      <AnimSpeedRow />
       <div className="space-y-2.5">
         <ToggleRow
           checked={ambientMotion}
@@ -485,6 +488,52 @@ function EffectsSection() {
           onToggle={toggleCrt}
           label={t("CRT mode — retro scanlines over the terminal")}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Animation playback rate. Reads as a video-player speed — 2× is twice as
+ * fast, 0.5× is half — and lands in CSS as the inverse duration multiplier.
+ */
+function AnimSpeedRow() {
+  const t = useT();
+  const animSpeed = useSettingsStore((s) => s.animSpeed);
+  const setAnimSpeed = useSettingsStore((s) => s.setAnimSpeed);
+
+  return (
+    <div className="mb-3">
+      <div className="mb-1.5 text-[11px] text-muted">{t("Animation speed")}</div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {ANIM_SPEEDS.map((speed) => {
+          const selected = speed === animSpeed;
+          return (
+            <button
+              key={speed}
+              onClick={() => setAnimSpeed(speed)}
+              title={
+                speed === DEFAULT_ANIM_SPEED
+                  ? t("Normal speed")
+                  : speed < DEFAULT_ANIM_SPEED
+                    ? t("Slower, more deliberate")
+                    : t("Snappier")
+              }
+              className={`h-7 rounded-md border px-2.5 font-mono text-[11px] transition-colors ${
+                selected
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-edge text-muted hover:border-accent/40 hover:text-ink"
+              }`}
+            >
+              {speed}×
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1.5 text-[10px] leading-relaxed text-faint">
+        {t(
+          "Retimes the app's own motion — panel swaps, ambient drift, the header sweep. Terminal output is never delayed.",
+        )}
       </div>
     </div>
   );

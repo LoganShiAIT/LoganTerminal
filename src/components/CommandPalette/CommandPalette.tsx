@@ -7,7 +7,11 @@ import {
 } from "../../stores/ptyStore";
 import { usePromptStore } from "../../stores/promptStore";
 import { useUiStore } from "../../stores/uiStore";
-import { useSettingsStore, type CursorStyle } from "../../stores/settingsStore";
+import {
+  useSettingsStore,
+  ANIM_SPEEDS,
+  type CursorStyle,
+} from "../../stores/settingsStore";
 import { THEMES } from "../../themes";
 import { fuzzyMatch } from "../../lib/fuzzy";
 import { recentActionIds, recordAction, recencyBoost } from "../../lib/recency";
@@ -52,6 +56,7 @@ function useActions(): PaletteAction[] {
   const cursorBlink = useSettingsStore((s) => s.cursorBlink);
   const ambientMotion = useSettingsStore((s) => s.ambientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
+  const animSpeed = useSettingsStore((s) => s.animSpeed);
   const notifyLongCommands = useSettingsStore((s) => s.notifyLongCommands);
   const notifyBell = useSettingsStore((s) => s.notifyBell);
   const locale = useSettingsStore((s) => s.locale);
@@ -122,8 +127,8 @@ function useActions(): PaletteAction[] {
       actions.push({
         id: "agent-prompt-timer-reset",
         group: t("Agents"),
-        label: t("Start/reset prompt timer"),
-        run: () => pty().markPromptSent(activePane.id),
+        label: t("Start/reset idle timer"),
+        run: () => pty().markAgentIdle(activePane.id),
       });
     }
 
@@ -494,6 +499,15 @@ function useActions(): PaletteAction[] {
         run: () => settings().toggleCrtMode(),
       },
     );
+    for (const speed of ANIM_SPEEDS) {
+      actions.push({
+        id: `anim-${speed}`,
+        group: t("Appearance"),
+        label: t("Animation speed: {speed}×", { speed }),
+        active: speed === animSpeed,
+        run: () => settings().setAnimSpeed(speed),
+      });
+    }
 
     return actions;
   }, [
@@ -505,6 +519,7 @@ function useActions(): PaletteAction[] {
     cursorBlink,
     ambientMotion,
     crtMode,
+    animSpeed,
     notifyLongCommands,
     notifyBell,
     locale,

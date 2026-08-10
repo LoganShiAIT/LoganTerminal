@@ -382,22 +382,26 @@ function StatusCluster() {
   const exited = Boolean(pane?.exited);
   const live = Boolean(pane?.sessionId) && !exited;
   const cwd = pane?.cwd ?? null;
-  const promptSentAt = pane?.lastPromptSentAt ?? null;
+  // The clock runs on the *user's* turn: it starts when the agent finishes
+  // answering and goes quiet, and stops the moment work resumes — that idle
+  // stretch is what the prompt-cache window actually measures.
+  const idleSince = pane?.agentIdleSinceAt ?? null;
+  const agentWorking = Boolean(pane?.busy) && !exited;
   const showPromptTimer = Boolean(pane && live);
-  const promptElapsedMs = promptSentAt ? Math.max(0, now - promptSentAt) : null;
+  const idleElapsedMs = idleSince ? Math.max(0, now - idleSince) : null;
   const promptProgress =
-    promptElapsedMs === null
+    idleElapsedMs === null
       ? 0
-      : Math.min(100, (promptElapsedMs / CLAUDE_CACHE_WINDOW_MS) * 100);
+      : Math.min(100, (idleElapsedMs / CLAUDE_CACHE_WINDOW_MS) * 100);
   const cacheWindowOpen =
-    promptElapsedMs !== null && promptElapsedMs < CLAUDE_CACHE_WINDOW_MS;
+    idleElapsedMs !== null && idleElapsedMs < CLAUDE_CACHE_WINDOW_MS;
 
   useEffect(() => {
-    if (!showPromptTimer || promptSentAt === null) return;
+    if (!showPromptTimer || idleSince === null) return;
     setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [showPromptTimer, promptSentAt]);
+  }, [showPromptTimer, idleSince]);
 
   return (
     <div className="ml-auto flex items-center gap-2.5 shrink-0">
@@ -478,29 +482,32 @@ function StatusCluster() {
       {showPromptTimer && pane && (
         <button
           className={`group relative isolate flex h-6 min-w-[86px] items-center gap-1.5 overflow-hidden rounded-full border px-2 font-mono text-[10px] transition-colors ${
-            promptSentAt
+            idleSince
               ? cacheWindowOpen
                 ? "border-accent/40 text-accent bg-accent/10 hover:bg-accent/15"
                 : "border-edge text-muted bg-ink/5 hover:text-accent hover:border-accent/35"
               : "border-edge text-faint bg-ink/5 hover:text-accent hover:border-accent/35"
           }`}
           style={
-            promptSentAt
+            idleSince
               ? ({
                   "--prompt-progress": `${promptProgress}%`,
                 } as CSSProperties)
               : undefined
           }
-          onClick={() => usePtyStore.getState().markPromptSent(pane.id)}
+          onClick={() => usePtyStore.getState().markAgentIdle(pane.id)}
           title={
-            promptSentAt
+            idleSince
               ? (cacheWindowOpen
                   ? t("Claude cache window")
-                  : t("Cache window passed")) + t(" · click to reset timer")
-              : t("Start prompt timer")
+                  : t("Cache window passed")) +
+                t(" · since the agent last finished · click to reset")
+              : agentWorking
+                ? t("Agent is working — the timer starts when it goes idle")
+                : t("Start idle timer")
           }
         >
-          {promptSentAt && (
+          {idleSince && (
             <span
               aria-hidden
               className="absolute inset-y-0 left-0 -z-10 w-[var(--prompt-progress)] bg-accent/15 transition-[width] duration-300"
@@ -508,7 +515,11 @@ function StatusCluster() {
           )}
           <ClockIcon />
           <span>
-            {promptElapsedMs === null ? t("timer") : formatDuration(promptElapsedMs)}
+            {idleElapsedMs !== null
+              ? formatDuration(idleElapsedMs)
+              : agentWorking
+                ? t("working")
+                : t("timer")}
           </span>
         </button>
       )}

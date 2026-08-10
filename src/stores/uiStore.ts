@@ -7,6 +7,8 @@ interface UiStore {
   rightSidebarOpen: boolean;
   leftSidebarWidth: number;
   rightSidebarWidth: number;
+  /** Height of the review panel's attachment list, above its drag handle. */
+  reviewListHeight: number;
   rightPanelTab: RightPanelTab;
   /** Command palette visibility — UI state, not persisted. */
   paletteOpen: boolean;
@@ -26,6 +28,7 @@ interface UiStore {
   toggleRightSidebar: () => void;
   setLeftSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
+  setReviewListHeight: (height: number) => void;
   setRightPanelTab: (tab: RightPanelTab) => void;
   /** Show `tab` in the right sidebar, opening the sidebar if it is closed. */
   openRightPanel: (tab: RightPanelTab) => void;
@@ -46,6 +49,11 @@ export const LEFT_SIDEBAR_MIN = 180;
 export const LEFT_SIDEBAR_MAX = 420;
 export const RIGHT_SIDEBAR_MIN = 280;
 export const RIGHT_SIDEBAR_MAX = 640;
+/** Attachment-list bounds. The panel also caps it at 70% of its own height,
+ *  so a value persisted from a tall window can't swallow a short one. */
+export const REVIEW_LIST_MIN = 72;
+export const REVIEW_LIST_MAX = 720;
+export const REVIEW_LIST_DEFAULT = 200;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -80,6 +88,11 @@ function loadLayout() {
         RIGHT_SIDEBAR_MIN,
         RIGHT_SIDEBAR_MAX,
       ),
+      reviewListHeight: clamp(
+        Number(parsed.reviewListHeight) || REVIEW_LIST_DEFAULT,
+        REVIEW_LIST_MIN,
+        REVIEW_LIST_MAX,
+      ),
       rightPanelTab,
     };
   } catch {
@@ -96,6 +109,7 @@ function saveLayout(state: UiStore) {
         rightSidebarOpen: state.rightSidebarOpen,
         leftSidebarWidth: state.leftSidebarWidth,
         rightSidebarWidth: state.rightSidebarWidth,
+        reviewListHeight: state.reviewListHeight,
         rightPanelTab: state.rightPanelTab,
       }),
     );
@@ -109,6 +123,7 @@ const initial = loadLayout() ?? {
   rightSidebarOpen: true,
   leftSidebarWidth: 240,
   rightSidebarWidth: 360,
+  reviewListHeight: REVIEW_LIST_DEFAULT,
   rightPanelTab: "assets" as RightPanelTab,
 };
 
@@ -131,6 +146,8 @@ export const useUiStore = create<UiStore>((set) => ({
     set({
       rightSidebarWidth: clamp(width, RIGHT_SIDEBAR_MIN, RIGHT_SIDEBAR_MAX),
     }),
+  setReviewListHeight: (height) =>
+    set({ reviewListHeight: clamp(height, REVIEW_LIST_MIN, REVIEW_LIST_MAX) }),
   setRightPanelTab: (rightPanelTab) => set({ rightPanelTab }),
   openRightPanel: (rightPanelTab) =>
     set({ rightPanelTab, rightSidebarOpen: true }),

@@ -9,8 +9,15 @@ export interface LeafPane {
   sessionId: string | null;
   cwd: string | null;
   agentName: string | null;
-  /** Last time the user submitted input to a detected agent in this pane. */
-  lastPromptSentAt: number | null;
+  /**
+   * When the detected agent in this pane last finished a turn and went quiet
+   * waiting on the user — i.e. the moment the idle clock starts. Set by
+   * `setPaneBusy` on the busy→idle edge, cleared the moment work resumes, so
+   * the timer measures how long the human has been sitting on their reply
+   * (which is what the prompt-cache window actually counts), not how long the
+   * agent took to answer.
+   */
+  agentIdleSinceAt: number | null;
   /** Shell/app-set window title (OSC 0/2); tab label prefers it over cwd. */
   title: string | null;
   initialCwd: string | null;
@@ -111,7 +118,7 @@ function makeLeaf(
     sessionId: null,
     cwd: null,
     agentName: null,
-    lastPromptSentAt: null,
+    agentIdleSinceAt: null,
     title: null,
     initialCwd,
     gitBranch: null,
@@ -267,7 +274,7 @@ interface PtyStore {
   setSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   setSessionId: (paneId: string, sessionId: string | null) => void;
   setCwd: (paneId: string, cwd: string | null) => void;
-  setAgentName: (paneId: string, name: string | null) => void;
+  setAgentName: (paneId: string, name: string | null, at?: number) => void;
   /** Branch + dirty counts land together (one OSC 7 refresh, one render). */
   setGitInfo: (
     paneId: string,
@@ -276,8 +283,8 @@ interface PtyStore {
   ) => void;
   /** Consume a pane's one-shot startup command after sending it. */
   clearInitialCmd: (paneId: string) => void;
-  /** Start/reset the prompt cadence timer for a pane. */
-  markPromptSent: (paneId: string, at?: number) => void;
+  /** Start/reset a pane's idle timer by hand (the chip and palette action). */
+  markAgentIdle: (paneId: string, at?: number) => void;
   setPaneTitle: (paneId: string, title: string | null) => void;
   /** Both null = a command just started; both set = it finished. */
   setCommandResult: (
@@ -285,8 +292,11 @@ interface PtyStore {
     code: number | null,
     durationMs: number | null,
   ) => void;
-  /** Flip a pane's "something is running here" flag; see LeafPane.busy. */
-  setPaneBusy: (paneId: string, busy: boolean) => void;
+  /**
+   * Flip a pane's "something is running here" flag (see LeafPane.busy) and,
+   * on an agent pane, drive `agentIdleSinceAt` off the same edge.
+   */
+  setPaneBusy: (paneId: string, busy: boolean, at?: number) => void;
   markUnread: (tabId: string, paneId: string) => void;
   /** Strong needs-a-human signal (bell / long command done); see LeafPane.attention. */
   markAttention: (tabId: string, paneId: string) => void;
@@ -601,10 +611,19 @@ export const usePtyStore = create<PtyStore>((set, get) => {
 
     setCwd: (paneId, cwd) => updatePane(paneId, (l) => ({ ...l, cwd })),
 
-    setAgentName: (paneId, agentName) =>
-      updatePane(paneId, (l) =>
-        l.agentName === agentName ? l : { ...l, agentName },
-      ),
+    // Detection can land after the CLI's banner already went quiet, which
+    // would leave the first turn untimed; an agent appearing on an idle pane
+    // therefore starts the clock itself. Losing the agent stops it — a bare
+    // shell has nobody waiting on the user.
+    setAgentName: (paneId, agentName, at = Date.now()) =>
+      updatePane(paneId, (l) => {
+        if (l.agentName === agentName) return l;
+        const next = { ...l, agentName };
+        if (!agentName) next.agentIdleSinceAt = null;
+        else if (!l.busy && l.agentIdleSinceAt === null)
+          next.agentIdleSinceAt = at;
+        return next;
+      }),
 
     setGitInfo: (paneId, gitBranch, gitDirty) =>
       updatePane(paneId, (l) => {
@@ -625,9 +644,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         l.initialCmd === null ? l : { ...l, initialCmd: null },
       ),
 
-    markPromptSent: (paneId, at = Date.now()) =>
+    markAgentIdle: (paneId, at = Date.now()) =>
       updatePane(paneId, (l) =>
-        l.lastPromptSentAt === at ? l : { ...l, lastPromptSentAt: at },
+        l.agentIdleSinceAt === at ? l : { ...l, agentIdleSinceAt: at },
       ),
 
     setPaneTitle: (paneId, title) =>
@@ -640,8 +659,19 @@ export const usePtyStore = create<PtyStore>((set, get) => {
           : { ...l, lastExitCode, lastDurationMs },
       ),
 
-    setPaneBusy: (paneId, busy) =>
-      updatePane(paneId, (l) => (l.busy === busy ? l : { ...l, busy })),
+    // The idle stamp rides this edge: work starting clears it, work falling
+    // silent starts it. Only on a live agent pane — a plain shell going quiet
+    // isn't an agent handing the turn back, and a dead one waits on nobody.
+    setPaneBusy: (paneId, busy, at = Date.now()) =>
+      updatePane(paneId, (l) => {
+        if (l.busy === busy) return l;
+        const tracks = Boolean(l.agentName) && !l.exited;
+        return {
+          ...l,
+          busy,
+          agentIdleSinceAt: tracks ? (busy ? null : at) : l.agentIdleSinceAt,
+        };
+      }),
 
     markUnread: (tabId, paneId) =>
       set((s) => {

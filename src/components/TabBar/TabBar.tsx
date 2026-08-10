@@ -285,7 +285,7 @@ export default function TabBar() {
         />
       )}
       <button
-        className="w-7 h-7 grid place-items-center rounded-lg text-base leading-none text-muted hover:text-accent hover:bg-accent/[0.08] hover:rotate-90 transition-[color,background-color,transform] duration-200 shrink-0"
+        className="w-7 h-7 grid place-items-center rounded-lg text-base leading-none text-muted hover:text-accent hover:bg-accent/[0.08] transition-[color,background-color] duration-150 shrink-0"
         onClick={handleNewTab}
         title={t("New terminal ({key})", { key: kbd("⌘T") })}
       >

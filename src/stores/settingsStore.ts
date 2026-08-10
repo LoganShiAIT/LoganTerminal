@@ -8,6 +8,13 @@ export const DEFAULT_FONT_SIZE = 13;
 export type CursorStyle = "block" | "bar" | "underline";
 export type Locale = "zh" | "en";
 
+/**
+ * Animation speed multiplier, playback-rate style: 2 runs twice as fast, 0.5
+ * half as fast. Durations divide by it, which is what `--anim-scale` carries.
+ */
+export const ANIM_SPEEDS = [0.5, 0.75, 1, 1.5, 2] as const;
+export const DEFAULT_ANIM_SPEED = 1;
+
 /** First run follows the OS: a zh-* UI language starts the app in Chinese. */
 function loadLocale(): Locale {
   const raw = localStorage.getItem(LOCALE_KEY);
@@ -27,6 +34,7 @@ const NOTIFY_LONG_KEY = "logan.notifyLongCmds";
 const NOTIFY_BELL_KEY = "logan.notifyBell";
 const FLEET_CMD_KEY = "logan.fleetCommand";
 const LOCALE_KEY = "logan.locale";
+const ANIM_SPEED_KEY = "logan.animSpeed";
 const MATH_INLINE_KEY = "logan.mathInline";
 const MATH_FOLLOW_KEY = "logan.mathAutoFollow";
 const DEFAULT_FLEET_CMD = "claude";
@@ -64,6 +72,20 @@ function applyAmbientAttr(on: boolean) {
   document.documentElement.dataset.ambient = on ? "1" : "0";
 }
 
+function loadAnimSpeed(): number {
+  const n = Number(localStorage.getItem(ANIM_SPEED_KEY));
+  return (ANIM_SPEEDS as readonly number[]).includes(n) ? n : DEFAULT_ANIM_SPEED;
+}
+
+/**
+ * Push the speed to CSS as a *duration* multiplier: every animation in
+ * index.css is written as `calc(var(--anim-scale) * <base>)`, so one variable
+ * retimes them all without any of them knowing about the setting.
+ */
+function applyAnimScale(speed: number) {
+  document.documentElement.style.setProperty("--anim-scale", String(1 / speed));
+}
+
 interface SettingsStore {
   /** UI language. Terminal content is never touched by this. */
   locale: Locale;
@@ -78,6 +100,8 @@ interface SettingsStore {
   ambientMotion: boolean;
   /** Retro scanline overlay on the terminal area. */
   crtMode: boolean;
+  /** Playback rate for the app's own animations — see [`ANIM_SPEEDS`]. */
+  animSpeed: number;
   /** Desktop toast when a long command finishes out of view (OSC 133). */
   notifyLongCommands: boolean;
   /** Desktop toast when a terminal bell rings out of view (agent prompts). */
@@ -103,6 +127,7 @@ interface SettingsStore {
   toggleCursorBlink: () => void;
   toggleAmbientMotion: () => void;
   toggleCrtMode: () => void;
+  setAnimSpeed: (speed: number) => void;
   toggleNotifyLongCommands: () => void;
   toggleNotifyBell: () => void;
   toggleMathInline: () => void;
@@ -121,6 +146,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   cursorBlink: loadBool(CURSOR_BLINK_KEY, true),
   ambientMotion: loadBool(AMBIENT_KEY, true),
   crtMode: loadBool(CRT_KEY, false),
+  animSpeed: loadAnimSpeed(),
   notifyLongCommands: loadBool(NOTIFY_LONG_KEY, true),
   notifyBell: loadBool(NOTIFY_BELL_KEY, true),
   mathInline: loadBool(MATH_INLINE_KEY, true),
@@ -180,6 +206,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     localStorage.setItem(CRT_KEY, next ? "1" : "0");
     set({ crtMode: next });
   },
+  setAnimSpeed: (speed) => {
+    const next = (ANIM_SPEEDS as readonly number[]).includes(speed)
+      ? speed
+      : DEFAULT_ANIM_SPEED;
+    localStorage.setItem(ANIM_SPEED_KEY, String(next));
+    applyAnimScale(next);
+    set({ animSpeed: next });
+  },
   toggleNotifyLongCommands: () => {
     const next = !get().notifyLongCommands;
     localStorage.setItem(NOTIFY_LONG_KEY, next ? "1" : "0");
@@ -213,4 +247,5 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   const s = useSettingsStore.getState();
   applyTheme(getTheme(s.themeId), s.accentOverride);
   applyAmbientAttr(s.ambientMotion);
+  applyAnimScale(s.animSpeed);
 }

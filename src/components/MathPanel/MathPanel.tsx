@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { useMathStore } from "../../stores/mathStore";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { renderMathMarkdown } from "../../lib/math";
-import { openTerminalLink } from "../../lib/openLink";
 import { sendTermCmd } from "../../lib/termBus";
 import { kbd } from "../../lib/keys";
-// Bundled locally (fonts included) — the app CSP forbids any external host.
-import "katex/dist/katex.min.css";
+import MarkdownPreview from "../MarkdownPreview/MarkdownPreview";
 import { useT } from "../../i18n";
 
 const SAMPLE = `## 目标函数
@@ -25,28 +22,6 @@ export default function MathPanel() {
   const autoFollow = useSettingsStore((s) => s.mathAutoFollow);
   const [editing, setEditing] = useState(true);
   const [copied, setCopied] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
-
-  // Rendering is pure string work; memo keeps typing in the textarea from
-  // re-parsing a long document on every keystroke's re-render.
-  const html = useMemo(() => renderMathMarkdown(source), [source]);
-
-  // Links are inert spans (a real <a> would navigate the whole webview) —
-  // route clicks through the same opener path as terminal links.
-  useEffect(() => {
-    const node = previewRef.current;
-    if (!node) return;
-    const onClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest<HTMLElement>("[data-href]");
-      const href = target?.dataset.href;
-      if (href) {
-        e.preventDefault();
-        openTerminalLink(href);
-      }
-    };
-    node.addEventListener("click", onClick);
-    return () => node.removeEventListener("click", onClick);
-  }, []);
 
   const copy = () => {
     navigator.clipboard
@@ -128,9 +103,9 @@ export default function MathPanel() {
         />
       )}
 
-      <div ref={previewRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {source.trim() ? (
-          <div className="md-body" dangerouslySetInnerHTML={{ __html: html }} />
+          <MarkdownPreview source={source} />
         ) : (
           <div className="space-y-3 text-xs text-faint">
             <p>

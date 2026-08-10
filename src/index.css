@@ -14,6 +14,13 @@
   --color-edge: rgba(217, 119, 87, 0.14);
 }
 
+:root {
+  /* Duration multiplier for the app's own animations. Pushed inline by
+     applyAnimScale() in settingsStore.ts as 1/speed, so a 2× speed setting
+     lands here as 0.5. Every duration below is written against it. */
+  --anim-scale: 1;
+}
+
 html,
 body,
 #root {
@@ -57,7 +64,7 @@ body {
    the pattern tiles seamlessly. Enabled via html[data-ambient="1"]. */
 @media (prefers-reduced-motion: no-preference) {
   html[data-ambient="1"] #root {
-    animation: grid-drift 40s linear infinite;
+    animation: grid-drift calc(var(--anim-scale) * 40s) linear infinite;
   }
 }
 
@@ -85,7 +92,7 @@ body {
   height: 42vw;
   top: -18vw;
   left: -12vw;
-  animation: orb-float-a 52s ease-in-out infinite alternate;
+  animation: orb-float-a calc(var(--anim-scale) * 52s) ease-in-out infinite alternate;
 }
 
 .orb-b {
@@ -94,7 +101,7 @@ body {
   bottom: -16vw;
   right: -10vw;
   filter: blur(90px) hue-rotate(45deg);
-  animation: orb-float-b 64s ease-in-out infinite alternate;
+  animation: orb-float-b calc(var(--anim-scale) * 64s) ease-in-out infinite alternate;
 }
 
 .orb-c {
@@ -104,7 +111,7 @@ body {
   left: 55%;
   opacity: 0.09;
   filter: blur(80px) hue-rotate(-35deg);
-  animation: orb-float-c 76s ease-in-out infinite alternate;
+  animation: orb-float-c calc(var(--anim-scale) * 76s) ease-in-out infinite alternate;
 }
 
 @keyframes orb-float-a {
@@ -144,7 +151,7 @@ body {
       transparent 62%,
       rgba(0, 0, 0, 0.28) 100%
     );
-  animation: crt-flicker 3.6s ease-in-out infinite;
+  animation: crt-flicker calc(var(--anim-scale) * 3.6s) ease-in-out infinite;
 }
 
 @keyframes crt-flicker {
@@ -181,7 +188,7 @@ body {
     transparent 80%
   );
   background-size: 200% 100%;
-  animation: shimmer-sweep 2.4s linear infinite;
+  animation: shimmer-sweep calc(var(--anim-scale) * 2.4s) linear infinite;
 }
 
 @keyframes shimmer-sweep {
@@ -207,7 +214,7 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: title-shine-pan 5.5s ease-in-out infinite;
+  animation: title-shine-pan calc(var(--anim-scale) * 5.5s) ease-in-out infinite;
 }
 
 @keyframes title-shine-pan {
@@ -228,7 +235,7 @@ body {
   overflow: hidden;
   white-space: nowrap;
   width: 37ch;
-  animation: typing 1.6s steps(37, end) 0.4s both;
+  animation: typing calc(var(--anim-scale) * 1.6s) steps(37, end) calc(var(--anim-scale) * 0.4s) both;
 }
 
 @keyframes typing {
@@ -251,6 +258,29 @@ body {
   from {
     opacity: 0;
     transform: scale(0.85) translateY(3px);
+  }
+}
+
+/* Right-sidebar tab swap. The incoming panel eases in from the side you moved
+   toward — `--panel-from` is set inline by RightPanel from the tab order, so
+   going left and going right don't look identical. Deliberately slower than
+   the app's other transitions: this is a whole surface changing, not a hover
+   state, and it reads as a swap rather than a flicker. */
+.panel-swap {
+  animation: panel-swap-in calc(var(--anim-scale) * 320ms)
+    cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes panel-swap-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--panel-from, 14px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-swap {
+    animation: none;
   }
 }
 
@@ -496,18 +526,30 @@ body {
   cursor: help;
 }
 
-/* Inline math awareness: a formula spotted in terminal output gets a dotted
-   accent underline (decoration overlay, one row tall — it never covers the
-   text) and previews on hover. */
+/* Inline math awareness: a formula spotted in terminal output gets a dashed
+   accent underline (our own overlay inside .xterm-screen, one row tall — it
+   never covers the text) and previews on hover.
+
+   The whole layer is pointer-events: none and hover is hit-tested from mouse
+   coordinates in mathAwareness.ts: anything interactive over the grid would
+   swallow the mousedown that starts a text selection. */
+.math-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .math-underline {
-  pointer-events: auto;
-  cursor: pointer;
+  position: absolute;
+  pointer-events: none;
   border-bottom: 1px dashed color-mix(in srgb, var(--color-accent) 70%, transparent);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
   border-radius: 2px;
   transition: background-color 0.12s ease-out;
 }
 
-.math-underline:hover {
+.math-underline-active {
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }

@@ -160,8 +160,8 @@ export default function AgentDashboard() {
             const name = row.agentName ?? "shell";
             const where = row.title || (row.cwd ? basename(row.cwd) : null);
             const age =
-              row.lastPromptSentAt !== null
-                ? formatDuration(Math.max(0, now - row.lastPromptSentAt))
+              row.agentIdleSinceAt !== null
+                ? formatDuration(Math.max(0, now - row.agentIdleSinceAt))
                 : null;
             return (
               <div
@@ -236,7 +236,7 @@ export default function AgentDashboard() {
                   {age && (
                     <span
                       className="font-mono text-[10px] text-faint"
-                      title={t("Since last prompt to this agent")}
+                      title={t("Waiting on you since this agent went idle")}
                     >
                       {age}
                     </span>

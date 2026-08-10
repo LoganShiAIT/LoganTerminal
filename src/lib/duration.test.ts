@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration } from "./duration";
+import { formatAgo, formatDuration } from "./duration";
 
 describe("formatDuration", () => {
   it("renders sub-second values as milliseconds", () => {
@@ -37,5 +37,28 @@ describe("formatDuration", () => {
     expect(formatDuration(3_599_600)).toBe("1h"); // rounds up through 60m
     expect(formatDuration(3_900_000)).toBe("1h 05m");
     expect(formatDuration(7_620_000)).toBe("2h 07m");
+  });
+});
+
+describe("formatAgo", () => {
+  // A fixed "now" so the fixtures don't depend on the wall clock.
+  const now = 1_800_000_000_000;
+  const ago = (seconds: number) => formatAgo(now / 1000 - seconds, now);
+
+  it("picks the largest unit that fits", () => {
+    expect(ago(0)).toBe("<1m");
+    expect(ago(59)).toBe("<1m");
+    expect(ago(60)).toBe("1m");
+    expect(ago(3599)).toBe("59m");
+    expect(ago(3600)).toBe("1h");
+    expect(ago(86_400)).toBe("1d");
+    expect(ago(604_800)).toBe("1w");
+    expect(ago(2_592_000)).toBe("1mo");
+    expect(ago(31_536_000)).toBe("1y");
+    expect(ago(63_072_000)).toBe("2y");
+  });
+
+  it("reads a future timestamp as just now instead of a negative", () => {
+    expect(ago(-5000)).toBe("<1m");
   });
 });

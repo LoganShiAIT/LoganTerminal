@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { tildify, basename, dirLabel, joinPath, parentOf } from "./paths";
+import {
+  tildify,
+  basename,
+  dirLabel,
+  isMarkdownPath,
+  joinPath,
+  parentOf,
+} from "./paths";
 
 describe("tildify", () => {
   it("collapses the home prefix to ~", () => {
@@ -83,5 +90,22 @@ describe("dirLabel", () => {
     expect(dirLabel("/Users/logan/code/")).toBe("code");
     expect(dirLabel("/")).toBe("/");
     expect(dirLabel("C:\\Users\\logan")).toBe("logan");
+  });
+});
+
+describe("isMarkdownPath", () => {
+  it("matches the markdown extensions, case-insensitively", () => {
+    expect(isMarkdownPath("/tmp/report.md")).toBe(true);
+    expect(isMarkdownPath("README.MD")).toBe(true);
+    expect(isMarkdownPath("C:\\docs\\notes.markdown")).toBe(true);
+    expect(isMarkdownPath("a/b/spec.mdx")).toBe(true);
+  });
+
+  it("rejects other files, dotfiles and extensionless names", () => {
+    expect(isMarkdownPath("/tmp/report.txt")).toBe(false);
+    expect(isMarkdownPath("/tmp/mdfile")).toBe(false);
+    expect(isMarkdownPath("/tmp/.md")).toBe(false); // a dotfile named ".md"
+    expect(isMarkdownPath("/tmp/notes.md.bak")).toBe(false);
+    expect(isMarkdownPath("")).toBe(false);
   });
 });

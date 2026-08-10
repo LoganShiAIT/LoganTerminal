@@ -193,7 +193,8 @@ export default function Terminal({
     // silent once it's waiting on the user, so sustained pty output — minus
     // keystroke echo — is the "a task is running here" signal. Chrome that
     // animates on a running agent (the header hairline) reads this flag,
-    // which is why merely opening a CLI must not raise it.
+    // which is why merely opening a CLI must not raise it. The falling edge
+    // is also what starts a pane's idle timer (see LeafPane.agentIdleSinceAt).
     let busy = false;
     let busyTimer: number | null = null;
     let lastInputAt = 0;
@@ -318,18 +319,15 @@ export default function Terminal({
           }
           term.onData((data) => {
             if (!sessionId || exited) return;
-            const sentAt = submitsPrompt(data) ? Date.now() : null;
+            const submitted = submitsPrompt(data);
             lastInputAt = Date.now();
             // Submitting starts the run: light up now rather than waiting
-            // for the agent's first frame to clear the echo window.
-            if (sentAt !== null) keepBusy();
+            // for the agent's first frame to clear the echo window. Busy also
+            // stops the idle timer — it restarts when the agent falls silent.
+            if (submitted) keepBusy();
             const store = usePtyStore.getState();
             const tab = store.tabs.find((t) => t.id === tabId);
-            const activeLeaf = tab ? findLeaf(tab.root, paneId) : undefined;
             invoke("pty_write", { sessionId, data });
-            if (sentAt !== null && activeLeaf?.agentName && !activeLeaf.exited) {
-              store.markPromptSent(paneId, sentAt);
-            }
             // Broadcast: fan the same bytes out to every live sibling pane
             // (tmux synchronize-panes). Same caveat as tmux: any paste
             // wrapping follows the *focused* pane's bracketed-paste mode.
@@ -337,9 +335,8 @@ export default function Terminal({
             for (const leaf of collectLeaves(tab.root)) {
               if (leaf.id !== paneId && leaf.sessionId && !leaf.exited) {
                 invoke("pty_write", { sessionId: leaf.sessionId, data });
-                if (sentAt !== null && leaf.agentName) {
-                  store.markPromptSent(leaf.id, sentAt);
-                }
+                // Siblings run their own busy tracking off their pty output;
+                // stamping their timers from here would fight it.
               }
             }
           });
@@ -385,7 +382,7 @@ export default function Terminal({
         s.mathAutoFollow !== prev.mathAutoFollow
       ) {
         // Turning either off must take effect now, not at the next write.
-        if (!s.mathInline) math.clearDecorations();
+        if (!s.mathInline) math.clearUnderlines();
         math.scheduleScan();
       }
     });

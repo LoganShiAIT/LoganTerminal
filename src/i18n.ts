@@ -30,9 +30,13 @@ const ZH: Record<string, string> = {
   "Detected agent: {name}": "检测到 agent：{name}",
   "Claude cache window": "Claude 缓存窗口内",
   "Cache window passed": "缓存窗口已过",
-  " · click to reset timer": " · 点击重置计时",
-  "Start prompt timer": "开始提示词计时",
+  " · since the agent last finished · click to reset":
+    " · 从 agent 上次答完算起 · 点击重置",
+  "Agent is working — the timer starts when it goes idle":
+    "Agent 正在工作——等它空闲下来才开始计时",
+  "Start idle timer": "开始空闲计时",
   timer: "计时",
+  working: "工作中",
   "Last command's exit status": "上一条命令的退出码",
   "Last command's duration": "上一条命令的耗时",
   "session {id}": "会话 {id}",
@@ -174,6 +178,9 @@ const ZH: Record<string, string> = {
   Save: "保存",
   "Drop files or folders here to review them.":
     "把文件或文件夹拖到这里来审阅。",
+  "Drag to resize · double-click to reset": "拖动调整大小 · 双击复位",
+  "Render as markdown": "渲染 markdown",
+  "Edit the source text": "编辑源文本",
 
   // --- diff panel -----------------------------------------------------
   "vs {base}": "对比 {base}",
@@ -184,6 +191,21 @@ const ZH: Record<string, string> = {
   "Refresh (also refreshes on every prompt)": "刷新（每次提示符也会自动刷新）",
   "Working tree clean — nothing uncommitted.": "工作区干净 —— 没有未提交的改动。",
   "No active shell directory yet.": "还没有活动的 shell 目录。",
+  "{n} files": "{n} 个文件",
+  "Open in review": "在审阅里打开",
+  "Collapse all": "全部折叠",
+  "Expand all": "全部展开",
+  "Loading…": "加载中…",
+  new: "新增",
+  bin: "二进制",
+
+  // --- diff panel: history --------------------------------------------
+  History: "历史",
+  "{n} commits": "{n} 条提交",
+  "{n} ahead of {base}": "领先 {base} {n} 条",
+  "No commits yet.": "还没有提交。",
+  "No files here — merge commits list their changes on the parents.":
+    "这里没有文件 —— 合并提交的改动记在它的父提交上。",
 
   // --- agent dashboard ------------------------------------------------
   "waiting on you": "等你处理",
@@ -194,7 +216,7 @@ const ZH: Record<string, string> = {
   Agents: "Agent",
   "Uncommitted changes: new / modified / deleted": "未提交改动：新增 / 修改 / 删除",
   "Unseen output": "未查看的输出",
-  "Since last prompt to this agent": "距离上次向该 agent 发送提示词",
+  "Waiting on you since this agent went idle": "该 agent 空闲等待你输入的时长",
 
   // --- worktree modal -------------------------------------------------
   // Split around the command name, which renders in a mono span.
@@ -251,7 +273,7 @@ const ZH: Record<string, string> = {
   "{agent} needs attention — tab {n}{where}": "{agent} 需要处理 —— 标签页 {n}{where}",
   "Agent overview — every pane, state, branch": "Agent 总览 —— 每个分屏的状态与分支",
   "Worktrees — new agent worktree / manage": "Worktree —— 新建 agent worktree / 管理",
-  "Start/reset prompt timer": "开始/重置提示词计时",
+  "Start/reset idle timer": "开始/重置空闲计时",
   "New fleet tab — {panes}, {cmd}": "新建 fleet 标签页 —— {panes}，{cmd}",
   "2 panes": "2 分屏",
   "2×2 grid": "2×2 宫格",
@@ -296,6 +318,7 @@ const ZH: Record<string, string> = {
   "Toggle cursor blink": "切换光标闪烁",
   "Toggle ambient motion": "切换背景动效",
   "Toggle CRT mode": "切换 CRT 模式",
+  "Animation speed: {speed}×": "动画速度：{speed}×",
   "Language: {name}": "语言：{name}",
   Coral: "珊瑚",
   Blue: "蓝",
@@ -329,6 +352,12 @@ const ZH: Record<string, string> = {
   Cursor: "光标",
   "Blinking cursor": "光标闪烁",
   Effects: "特效",
+  "Animation speed": "动画速度",
+  "Normal speed": "正常速度",
+  "Slower, more deliberate": "更慢、更从容",
+  Snappier: "更利落",
+  "Retimes the app's own motion — panel swaps, ambient drift, the header sweep. Terminal output is never delayed.":
+    "调整界面自身的动效节奏 —— 面板切换、背景漂移、顶栏扫光。终端输出不受任何影响。",
   "Ambient motion — drifting grid & floating glow": "背景动效 —— 漂移网格与浮动光晕",
   "Respects the system reduced-motion preference": "遵循系统的“减弱动态效果”设置",
   "CRT mode — retro scanlines over the terminal": "CRT 模式 —— 终端上的复古扫描线",
