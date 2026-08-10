@@ -37,7 +37,7 @@ export default function MathPanel() {
     <div className="flex h-full flex-col text-sm">
       <div className="shrink-0 border-b border-edge px-3 pb-2 pt-3">
         <div className="flex items-center justify-between">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="text-[11px] font-semibold text-ink">
             {t("Math")}
           </div>
           <div className="-mr-1 flex items-center gap-0.5">
@@ -103,7 +103,7 @@ export default function MathPanel() {
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="scroll-edge [--scroll-edge-x:12px] min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {source.trim() ? (
           <MarkdownPreview source={source} />
         ) : (

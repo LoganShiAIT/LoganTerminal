@@ -31,7 +31,7 @@ export default function RightPanel() {
   }, [index]);
 
   const btn = (active: boolean) =>
-    `relative z-10 h-full rounded-md text-[11px] font-semibold uppercase tracking-[0.12em] ${
+    `relative z-10 h-full rounded-md text-[11px] font-medium ${
       active ? "text-accent" : "text-muted hover:text-ink"
     }`;
   const btnStyle = { transition: `color ${PILL_MS} ${EASE}` };

@@ -113,7 +113,7 @@ export default function DiffPanel() {
   );
 
   const segBtn = (active: boolean) =>
-    `h-full min-w-0 flex-1 truncate rounded-md px-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+    `h-full min-w-0 flex-1 truncate rounded-md px-1 text-[11px] font-medium transition-colors ${
       active ? "text-accent bg-accent/15 border border-accent/30" : "text-muted hover:text-ink"
     }`;
 
@@ -189,7 +189,7 @@ export default function DiffPanel() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">{body()}</div>
+      <div className="scroll-edge [--scroll-edge-x:8px] min-h-0 flex-1 overflow-y-auto p-2">{body()}</div>
     </div>
   );
 }

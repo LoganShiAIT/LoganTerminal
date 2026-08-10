@@ -628,7 +628,7 @@ export default function CommandPalette() {
         }
       }}
     >
-      <div className="lg lg-panel w-[580px] max-w-[92vw] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[580px] max-w-[92vw] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-12 px-4 border-b border-edge">
           <span className="font-mono text-accent text-sm shrink-0">❯</span>
           <input
@@ -660,7 +660,7 @@ export default function CommandPalette() {
           <span className="kbd shrink-0">esc</span>
         </div>
 
-        <div className="max-h-[46vh] overflow-y-auto py-1.5">
+        <div className="scroll-edge max-h-[46vh] overflow-y-auto py-1.5">
           {results.length === 0 && (
             <div className="px-4 py-6 text-center text-xs text-faint">
               {t("No matching commands")}
@@ -677,13 +677,13 @@ export default function CommandPalette() {
             return (
               <div key={(r.recent ? "recent:" : "") + r.action.id}>
                 {showHeader && (
-                  <div className="px-4 pt-2.5 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-faint">
+                  <div className="px-4 pt-3 pb-1.5 text-[11px] font-semibold text-muted">
                     {groupOf(r)}
                   </div>
                 )}
                 <div
                   ref={isSelected ? selectedRef : undefined}
-                  className={`relative mx-1.5 flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors duration-75 ${
+                  className={`relative mx-1.5 flex h-10 cursor-pointer items-center gap-2.5 lg-nested [--lg-inset:6px] px-3 text-[13px] transition-colors duration-75 ${
                     isSelected
                       ? "bg-accent/[0.13] text-ink"
                       : "text-ink/75 hover:bg-ink/[0.05]"

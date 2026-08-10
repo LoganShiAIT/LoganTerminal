@@ -140,9 +140,9 @@ export default function AgentDashboard() {
         }
       }}
     >
-      <div className="lg lg-panel w-[640px] max-w-[94vw] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[640px] max-w-[94vw] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-11 px-4 border-b border-edge">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+          <span className="text-[13px] font-semibold text-ink">
             {t("Agents")}
           </span>
           <span className="font-mono text-[10px] text-faint">
@@ -154,7 +154,7 @@ export default function AgentDashboard() {
           <span className="ml-auto kbd shrink-0">esc</span>
         </div>
 
-        <div className="max-h-[52vh] overflow-y-auto py-1.5">
+        <div className="scroll-edge max-h-[52vh] overflow-y-auto py-1.5">
           {rows.map((row, i) => {
             const isSelected = i === selected;
             const name = row.agentName ?? "shell";
@@ -167,7 +167,7 @@ export default function AgentDashboard() {
               <div
                 key={row.paneId}
                 ref={isSelected ? selectedRef : undefined}
-                className={`relative mx-1.5 flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-[12px] transition-colors duration-75 ${
+                className={`relative mx-1.5 flex h-10 cursor-pointer items-center gap-2.5 lg-nested [--lg-inset:6px] px-3 text-[12px] transition-colors duration-75 ${
                   isSelected
                     ? "bg-accent/[0.13] text-ink"
                     : "text-ink/75 hover:bg-ink/[0.05]"

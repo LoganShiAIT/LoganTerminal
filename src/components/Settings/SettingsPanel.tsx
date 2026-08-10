@@ -44,10 +44,10 @@ export default function SettingsPanel() {
           it: .lg's rim and sheen are absolutely positioned, so they'd stretch
           to the full scroll height and slide away with the content if this
           element were the scroller. */}
-      <div className="lg lg-panel w-[460px] overflow-hidden rounded-2xl animate-[pop-in_0.14s_ease-out]">
+      <div className="lg lg-panel w-[460px] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
         <div className="max-h-[82vh] overflow-y-auto">
           <div className="lg-sticky flex items-center justify-between px-5 pt-4 pb-3 border-b border-edge sticky top-0 z-10">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-accent font-semibold">
+            <div className="text-[13px] font-semibold text-ink">
               {t("Settings")}
             </div>
             <button
@@ -87,7 +87,7 @@ export default function SettingsPanel() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
+    <div className="text-[11px] font-semibold text-muted mb-2.5">
       {children}
     </div>
   );

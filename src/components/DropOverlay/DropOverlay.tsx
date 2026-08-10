@@ -20,7 +20,7 @@ export default function DropOverlay() {
   return (
     <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center p-8 bg-accent/10 backdrop-blur-sm animate-[fade-in_0.15s_ease-out]">
       <div className="border-2 border-dashed border-accent rounded-2xl px-8 py-6 bg-panel/90 max-w-[80%] animate-[pop-in_0.18s_ease-out,glow-breathe_2.6s_ease-in-out_infinite]">
-        <div className="text-accent text-sm font-semibold tracking-[0.15em] uppercase mb-3">
+        <div className="text-accent text-base font-semibold mb-3">
           {t("Drop to attach")}
         </div>
         <div className="text-[11px] text-muted mb-3">
