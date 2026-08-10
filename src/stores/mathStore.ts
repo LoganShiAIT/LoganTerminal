@@ -10,10 +10,17 @@ interface MathStore {
   source: string;
   /** Where the current source came from, for the panel's status line. */
   origin: MathOrigin;
+  /**
+   * Auto-follow is paused because this session's user typed in the editor.
+   * Deliberately session-scoped and never persisted: `origin` is restored as
+   * `manual` at every startup, so gating on it left auto-follow permanently
+   * off for anyone who had ever put something in the panel.
+   */
+  manualHold: boolean;
   setSource: (source: string, origin: MathOrigin) => void;
   /**
-   * Push freshly-printed terminal math in. Deliberately yields to a hand-
-   * edited scratch: silently overwriting what someone is typing is the kind
+   * Push freshly-printed terminal math in. Yields to a scratch being hand-
+   * edited right now: silently overwriting what someone is typing is the kind
    * of "helpful" that loses work.
    */
   autoFollow: (source: string) => void;
@@ -30,20 +37,28 @@ function load(): string {
 
 /**
  * The scratch survives restarts — a formula you were mid-way through
- * rewriting for a paper is worth more than a clean slate.
+ * rewriting for a paper is worth more than a clean slate. It is shown again,
+ * but it does not hold auto-follow hostage: the next formula the terminal
+ * prints takes the panel back.
  */
 export const useMathStore = create<MathStore>((set) => ({
   source: load(),
   origin: "manual",
-  setSource: (source, origin) => set({ source: source.slice(0, MAX_SOURCE), origin }),
+  manualHold: false,
+  setSource: (source, origin) =>
+    set({
+      source: source.slice(0, MAX_SOURCE),
+      origin,
+      manualHold: origin === "manual" && source.trim() !== "",
+    }),
   autoFollow: (source) =>
     set((s) => {
-      if (s.origin === "manual" && s.source.trim()) return s;
+      if (s.manualHold) return s;
       const next = source.slice(0, MAX_SOURCE);
-      if (next === s.source) return s;
+      if (next === s.source && s.origin === "auto") return s;
       return { source: next, origin: "auto" };
     }),
-  clear: () => set({ source: "", origin: "manual" }),
+  clear: () => set({ source: "", origin: "manual", manualHold: false }),
 }));
 
 useMathStore.subscribe((state) => {

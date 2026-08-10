@@ -20,6 +20,7 @@ export default function MathPanel() {
   const t = useT();
   const source = useMathStore((s) => s.source);
   const origin = useMathStore((s) => s.origin);
+  const manualHold = useMathStore((s) => s.manualHold);
   const setSource = useMathStore((s) => s.setSource);
   const autoFollow = useSettingsStore((s) => s.mathAutoFollow);
   const [editing, setEditing] = useState(true);
@@ -97,11 +98,13 @@ export default function MathPanel() {
                   ? t("from last command output")
                   : origin === "auto"
                     ? t("auto — following terminal output")
-                    : autoFollow
+                    : autoFollow && manualHold
                       ? t("edited here — auto-follow paused")
-                      : t("scratch — edited here")}
+                      : autoFollow
+                        ? t("scratch — the next formula replaces it")
+                        : t("scratch — edited here")}
           </span>
-          {autoFollow && origin === "manual" && source.trim() && (
+          {autoFollow && manualHold && (
             <button
               className="shrink-0 rounded px-1 text-accent transition-colors hover:bg-accent/10"
               title={t("Drop this scratch and follow the terminal again")}

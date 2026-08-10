@@ -125,6 +125,7 @@ const ZH: Record<string, string> = {
   "auto — following terminal output": "自动 —— 正在跟随终端输出",
   "edited here — auto-follow paused": "已手动编辑 —— 自动跟随已暂停",
   "scratch — edited here": "草稿 —— 手动编辑",
+  "scratch — the next formula replaces it": "上次的草稿 —— 下一个公式会覆盖它",
   resume: "恢复跟随",
   "Drop this scratch and follow the terminal again":
     "丢掉这份草稿，重新跟随终端",
