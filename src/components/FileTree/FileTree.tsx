@@ -236,7 +236,7 @@ export default function FileTree() {
     <div className="text-sm flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-semibold text-ink">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
             {t("Files")}
           </div>
           <div className="flex items-center gap-0.5 -mr-1">
@@ -283,7 +283,7 @@ export default function FileTree() {
           {cwd ? tildify(cwd, home) : "…"}
         </div>
       </div>
-      <ul className="scroll-edge flex-1 overflow-y-auto py-1.5">
+      <ul className="flex-1 overflow-y-auto py-1.5">
         {!atRoot && (
           <li
             className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer font-mono text-xs text-faint hover:bg-accent/[0.07] hover:text-muted transition-colors duration-100"

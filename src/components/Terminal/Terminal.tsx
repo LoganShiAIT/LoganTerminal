@@ -543,7 +543,7 @@ export default function Terminal({
       <div ref={containerRef} className="w-full h-full pl-3 pr-1 py-2" />
 
       {searchOpen && (
-        <div className="lg lg-control absolute top-1.5 right-3 z-10 flex items-center gap-0.5 h-8 pl-2.5 pr-1 rounded-lg animate-[pop-in_0.12s_ease-out]">
+        <div className="absolute top-1.5 right-3 z-10 flex items-center gap-0.5 h-8 pl-2.5 pr-1 rounded-lg border border-edge bg-raise/95 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.45)] animate-[pop-in_0.12s_ease-out]">
           <input
             ref={searchInputRef}
             type="text"
@@ -608,7 +608,7 @@ export default function Terminal({
 
       {!atBottom && (
         <button
-          className="lg lg-control lg-interactive lg-accent-hover absolute bottom-3 right-4 z-10 w-8 h-8 grid place-items-center rounded-full text-accent hover:text-white animate-[pop-in_0.12s_ease-out]"
+          className="absolute bottom-3 right-4 z-10 w-8 h-8 grid place-items-center rounded-full border border-edge bg-raise/90 backdrop-blur-md text-accent shadow-[0_2px_12px_rgba(0,0,0,0.4)] hover:bg-accent hover:text-white transition-colors animate-[pop-in_0.12s_ease-out]"
           onClick={() => {
             termRef.current?.scrollToBottom();
             termRef.current?.focus();

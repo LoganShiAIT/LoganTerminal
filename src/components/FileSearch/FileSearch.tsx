@@ -181,7 +181,7 @@ export default function FileSearch() {
         if (e.target === e.currentTarget) close(true);
       }}
     >
-      <div className="lg lg-panel w-[640px] max-w-[92vw] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
+      <div className="w-[640px] max-w-[92vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
         <div className="flex h-12 items-center gap-2.5 border-b border-edge px-4">
           <SearchIcon />
           <input
@@ -221,7 +221,7 @@ export default function FileSearch() {
         </div>
 
         <div className="flex items-center gap-2 border-b border-edge px-4 py-2">
-          <span className="text-[11px] font-semibold text-muted shrink-0">
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-faint shrink-0">
             {t("in")}
           </span>
           <span
@@ -261,7 +261,7 @@ export default function FileSearch() {
           ))}
         </div>
 
-        <div className="scroll-edge max-h-[46vh] overflow-y-auto py-1.5">
+        <div className="max-h-[46vh] overflow-y-auto py-1.5">
           {error && (
             <div className="break-all px-4 py-6 text-center text-xs text-red-400/90">
               {error}
@@ -278,7 +278,7 @@ export default function FileSearch() {
               <div
                 key={hit.path}
                 ref={isSelected ? selectedRef : undefined}
-                className={`group relative mx-1.5 flex h-10 cursor-pointer items-center gap-2.5 lg-nested [--lg-inset:6px] px-3 text-[13px] transition-colors duration-75 ${
+                className={`group relative mx-1.5 flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors duration-75 ${
                   isSelected
                     ? "bg-accent/[0.13] text-ink"
                     : "text-ink/75 hover:bg-ink/[0.05]"
@@ -296,7 +296,7 @@ export default function FileSearch() {
                 </span>
                 {hit.is_repo && (
                   <span
-                    className="shrink-0 rounded-full border border-accent/35 px-1.5 py-px text-[10px] font-semibold text-accent"
+                    className="shrink-0 rounded-full border border-accent/35 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.12em] text-accent"
                     title={t("Git repository")}
                   >
                     {t("repo")}

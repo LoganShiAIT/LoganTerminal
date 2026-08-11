@@ -176,9 +176,9 @@ export default function WorktreeModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="lg lg-panel w-[560px] max-w-[94vw] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
+      <div className="w-[560px] max-w-[94vw] overflow-hidden rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out]">
         <div className="flex items-center gap-2.5 h-11 px-4 border-b border-edge">
-          <span className="text-[13px] font-semibold text-ink">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
             {t("Worktrees")}
           </span>
           {repoName && (
@@ -284,7 +284,7 @@ export default function WorktreeModal() {
                     {e.branch ?? "(detached)"}
                   </span>
                   {e.is_main && (
-                    <span className="px-1.5 rounded-full border border-edge text-[10px] text-faint">
+                    <span className="px-1.5 rounded-full border border-edge text-[9px] uppercase tracking-[0.12em] text-faint">
                       main
                     </span>
                   )}

@@ -163,7 +163,7 @@ export default function ReviewPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
-        <div className="text-[11px] font-semibold text-ink">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
           {t("File Review")}
         </div>
         <div className="font-mono text-[11px] text-muted mt-1 truncate">
@@ -178,7 +178,7 @@ export default function ReviewPanel() {
           // maxHeight, not a clamp on the stored value: a height persisted
           // from a tall window must not swallow the reader in a short one.
           style={{ height: listHeight, maxHeight: "70%" }}
-          className="scroll-edge [--scroll-edge-x:8px] min-h-0 shrink-0 overflow-y-auto p-2"
+          className="min-h-0 shrink-0 overflow-y-auto p-2"
         >
           {attachments.length === 0 ? (
             <Placeholder />
@@ -250,7 +250,7 @@ export default function ReviewPanel() {
 
           {state === "ready" && preview ? (
             // The draft, not the saved text: edits show up in the preview.
-            <div className="scroll-edge [--scroll-edge-x:12px] min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               {draft.trim() ? (
                 <MarkdownPreview source={draft} />
               ) : (

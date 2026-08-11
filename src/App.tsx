@@ -134,15 +134,15 @@ export default function App() {
           pointer-driven widgets (tab pills) must opt out via ="false". */}
       <header
         data-tauri-drag-region="deep"
-        className={`lg lg-chrome h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge ${
+        className={`relative h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
           isMac ? "pl-20" : "pl-2"
         }`}
       >
         <button
           className={`w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors ${
             leftSidebarOpen
-              ? "text-ink bg-ink/[0.09]"
-              : "text-muted hover:text-ink hover:bg-ink/[0.06]"
+              ? "text-accent bg-accent/[0.08]"
+              : "text-muted hover:text-accent hover:bg-accent/[0.08]"
           }`}
           onClick={toggleLeftSidebar}
           title={t("Toggle file sidebar")}
@@ -154,8 +154,8 @@ export default function App() {
         <button
           className={`w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors ${
             rightSidebarOpen
-              ? "text-ink bg-ink/[0.09]"
-              : "text-muted hover:text-ink hover:bg-ink/[0.06]"
+              ? "text-accent bg-accent/[0.08]"
+              : "text-muted hover:text-accent hover:bg-accent/[0.08]"
           }`}
           onClick={toggleRightSidebar}
           title={t("Toggle review sidebar")}
@@ -163,7 +163,7 @@ export default function App() {
           <SidebarIcon side="right" />
         </button>
         <button
-          className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-muted hover:text-ink hover:bg-ink/[0.06] transition-colors"
+          className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-muted hover:text-accent hover:bg-accent/[0.08] transition-colors"
           onClick={() => useSettingsStore.getState().setPanelOpen(true)}
           title={t("Settings ({key})", { key: kbd("⌘,") })}
         >
@@ -174,7 +174,7 @@ export default function App() {
 
       <div className="flex flex-1 min-h-0">
         <aside
-          className="lg lg-chrome shrink-0 overflow-hidden border-edge transition-[width,opacity,border-width] duration-200 ease-out"
+          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
           style={{
             width: leftSidebarOpen ? leftSidebarWidth : 0,
             borderRightWidth: leftSidebarOpen ? 1 : 0,
@@ -214,7 +214,7 @@ export default function App() {
 
         <ResizeHandle side="right" active={rightSidebarOpen} />
         <aside
-          className="lg lg-chrome shrink-0 overflow-hidden border-edge transition-[width,opacity,border-width] duration-200 ease-out"
+          className="shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm transition-[width,opacity,border-width] duration-200 ease-out"
           style={{
             width: rightSidebarOpen ? rightSidebarWidth : 0,
             borderLeftWidth: rightSidebarOpen ? 1 : 0,
@@ -407,7 +407,7 @@ function StatusCluster() {
     <div className="ml-auto flex items-center gap-2.5 shrink-0">
       {activeTab?.broadcast && (
         <button
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-white bg-accent border border-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-white bg-accent border border-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
           onClick={() =>
             usePtyStore.getState().toggleBroadcast(activeTab.id)
           }
@@ -420,7 +420,7 @@ function StatusCluster() {
       )}
       {attnCount > 0 && (
         <button
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono text-ink bg-ink/[0.07] border border-edge hover:bg-ink/[0.12] transition-colors"
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-accent bg-accent/15 border border-accent/40 hover:bg-accent hover:text-white transition-colors"
           onClick={() => {
             usePtyStore.getState().jumpToAttention();
             requestAnimationFrame(() => sendTermCmd("focus"));
@@ -430,13 +430,13 @@ function StatusCluster() {
             { key: kbd("⌘⇧O") },
           )}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
           {t("{n} waiting", { n: attnCount })}
         </button>
       )}
       {pane?.gitBranch && !exited && (
         <button
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono text-muted bg-ink/[0.05] border border-edge max-w-[200px] hover:text-ink hover:bg-ink/[0.09] transition-colors"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge max-w-[200px] hover:text-accent hover:border-accent/35 transition-colors"
           onClick={() => useUiStore.getState().openRightPanel("diff")}
           title={
             t("Git branch of {where}", { where: cwd ?? t("cwd") }) +
@@ -472,7 +472,7 @@ function StatusCluster() {
       )}
       {pane?.agentName && !exited && (
         <span
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-ink bg-ink/[0.07] border border-edge"
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
           title={t("Detected agent: {name}", { name: pane.agentName })}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
@@ -481,12 +481,12 @@ function StatusCluster() {
       )}
       {showPromptTimer && pane && (
         <button
-          className={`group relative isolate flex h-7 min-w-[92px] items-center gap-1.5 overflow-hidden rounded-full border px-2.5 font-mono text-[11px] transition-colors ${
+          className={`group relative isolate flex h-6 min-w-[86px] items-center gap-1.5 overflow-hidden rounded-full border px-2 font-mono text-[10px] transition-colors ${
             idleSince
               ? cacheWindowOpen
-                ? "border-edge text-ink bg-ink/[0.07] hover:bg-ink/[0.11]"
-                : "border-edge text-muted bg-ink/[0.05] hover:text-ink hover:bg-ink/[0.09]"
-              : "border-edge text-faint bg-ink/[0.05] hover:text-ink hover:bg-ink/[0.09]"
+                ? "border-accent/40 text-accent bg-accent/10 hover:bg-accent/15"
+                : "border-edge text-muted bg-ink/5 hover:text-accent hover:border-accent/35"
+              : "border-edge text-faint bg-ink/5 hover:text-accent hover:border-accent/35"
           }`}
           style={
             idleSince
@@ -527,7 +527,7 @@ function StatusCluster() {
           zsh/bash shell integration (OSC 133); silently absent otherwise. */}
       {!exited && pane?.lastExitCode != null && pane.lastExitCode !== 0 && (
         <span
-          className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-red-300 bg-red-500/12 border border-red-400/35"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold text-red-300 bg-red-500/15 border border-red-400/40"
           title={t("Last command's exit status")}
         >
           exit {pane.lastExitCode}
@@ -536,7 +536,7 @@ function StatusCluster() {
       {/* Same anomaly-only philosophy: quick commands say nothing. */}
       {!exited && pane?.lastDurationMs != null && pane.lastDurationMs >= 2000 && (
         <span
-          className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono text-muted bg-ink/[0.05] border border-edge"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono text-muted bg-ink/5 border border-edge"
           title={t("Last command's duration")}
         >
           {formatDuration(pane.lastDurationMs)}
@@ -621,7 +621,7 @@ function WelcomeScreen() {
   const t = useT();
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-7">
-      <div className="grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 bg-raise/60 animate-[glow-breathe_4.5s_ease-in-out_infinite]">
+      <div className="grid h-20 w-20 place-items-center rounded-3xl border border-accent/30 bg-raise/50 backdrop-blur-sm animate-[glow-breathe_4.5s_ease-in-out_infinite]">
         <div className="flex items-end gap-1.5 font-mono text-3xl text-accent">
           ❯
           <span className="inline-block w-[0.55em] h-[1.05em] rounded-[2px] bg-accent/85 animate-[cursor-blink_1.1s_steps(1)_infinite]" />

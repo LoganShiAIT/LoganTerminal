@@ -120,7 +120,7 @@ export default function AssetPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
-        <div className="text-[11px] font-semibold text-ink">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
           {t("Assets")}
         </div>
         <div className="font-mono text-[11px] text-muted mt-1 truncate">
@@ -132,7 +132,7 @@ export default function AssetPanel() {
               })}
         </div>
       </div>
-      <div className="scroll-edge flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         <Section label={t("Clipboard")} count={clipItems.length}>
           {clipItems.length === 0 ? (
             <Placeholder text={t("Copy text or an image to see it here.")} />
@@ -266,13 +266,13 @@ function Lightbox({
   }, [onClose]);
 
   const btn =
-    "h-7 px-3 lg-nested border border-edge text-[11px] text-muted transition-colors hover:bg-ink/[0.12] hover:text-ink disabled:opacity-40 disabled:pointer-events-none";
+    "h-7 px-3 rounded-md border border-edge text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40 disabled:pointer-events-none";
 
   // Portal to <body>: the sidebar's backdrop-filter would otherwise become
   // the containing block for this fixed overlay and clip it to the panel.
   return createPortal(
     <div
-      className="lg-dim fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 backdrop-blur-md p-8 animate-[fade-in_0.12s_ease-out]"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-md p-8 animate-[fade-in_0.12s_ease-out]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -287,7 +287,7 @@ function Lightbox({
         }}
         className="max-h-[74vh] max-w-[88vw] rounded-xl border border-edge shadow-[0_24px_90px_rgba(0,0,0,0.6)] animate-[pop-in_0.16s_ease-out] object-contain"
       />
-      <div className="lg lg-clear flex items-center gap-2 rounded-[18px] px-3 py-2 [--lg-radius:18px] [--lg-inset:8px] animate-[card-in_0.2s_ease-out]">
+      <div className="flex items-center gap-2 rounded-xl border border-edge bg-raise/95 backdrop-blur-md px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] animate-[card-in_0.2s_ease-out]">
         {data.path && (
           <span
             className="max-w-[280px] truncate font-mono text-[10px] text-faint"
@@ -336,7 +336,7 @@ function Section({
   return (
     <div className="p-2">
       <div className="flex items-center justify-between px-1 mb-1.5">
-        <span className="text-[11px] font-semibold text-muted">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted">
           {label}
         </span>
         {count > 0 && (

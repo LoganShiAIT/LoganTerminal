@@ -40,45 +40,39 @@ export default function SettingsPanel() {
         if (e.target === e.currentTarget) setOpen(false);
       }}
     >
-      {/* The glass lives on the outer shell and the scrolling happens inside
-          it: .lg's rim and sheen are absolutely positioned, so they'd stretch
-          to the full scroll height and slide away with the content if this
-          element were the scroller. */}
-      <div className="lg lg-panel w-[460px] overflow-hidden rounded-[22px] animate-[pop-in_0.14s_ease-out]">
-        <div className="max-h-[82vh] overflow-y-auto">
-          <div className="lg-sticky flex items-center justify-between px-5 pt-4 pb-3 border-b border-edge sticky top-0 z-10">
-            <div className="text-[13px] font-semibold text-ink">
-              {t("Settings")}
-            </div>
-            <button
-              className="w-6 h-6 grid place-items-center rounded-md text-[14px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
-              onClick={() => setOpen(false)}
-              title={t("Close (esc)")}
-            >
-              ×
-            </button>
+      <div className="w-[460px] max-h-[82vh] overflow-y-auto rounded-2xl border border-edge bg-raise shadow-[0_16px_60px_rgba(0,0,0,0.5)] animate-[pop-in_0.14s_ease-out]">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-edge sticky top-0 bg-raise z-10">
+          <div className="text-[11px] uppercase tracking-[0.22em] text-accent font-semibold">
+            {t("Settings")}
           </div>
+          <button
+            className="w-6 h-6 grid place-items-center rounded-md text-[14px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
+            onClick={() => setOpen(false)}
+            title={t("Close (esc)")}
+          >
+            ×
+          </button>
+        </div>
 
-          <div className="px-5 py-4 space-y-5">
-            <LanguageSection />
-            <ThemeSection />
-            <AccentSection />
-            <FontSizeSection />
-            <CursorSection />
-            <EffectsSection />
-            <NotificationsSection />
-            <MathSection />
-            <AgentsSection />
-            <PromptsSection />
-            <FilesSection />
-          </div>
+        <div className="px-5 py-4 space-y-5">
+          <LanguageSection />
+          <ThemeSection />
+          <AccentSection />
+          <FontSizeSection />
+          <CursorSection />
+          <EffectsSection />
+          <NotificationsSection />
+          <MathSection />
+          <AgentsSection />
+          <PromptsSection />
+          <FilesSection />
+        </div>
 
-          <div className="px-5 pb-4 text-[10px] text-faint">
-            {t(
-              "Changes apply instantly and are remembered across restarts. Tip: everything here is also in the command palette ({key}).",
-              { key: kbd("⌘P") },
-            )}
-          </div>
+        <div className="px-5 pb-4 text-[10px] text-faint">
+          {t(
+            "Changes apply instantly and are remembered across restarts. Tip: everything here is also in the command palette ({key}).",
+            { key: kbd("⌘P") },
+          )}
         </div>
       </div>
     </div>
@@ -87,7 +81,7 @@ export default function SettingsPanel() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] font-semibold text-muted mb-2.5">
+    <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
       {children}
     </div>
   );
@@ -477,22 +471,12 @@ function EffectsSection() {
   const toggleAmbient = useSettingsStore((s) => s.toggleAmbientMotion);
   const crtMode = useSettingsStore((s) => s.crtMode);
   const toggleCrt = useSettingsStore((s) => s.toggleCrtMode);
-  const liquidGlass = useSettingsStore((s) => s.liquidGlass);
-  const toggleGlass = useSettingsStore((s) => s.toggleLiquidGlass);
 
   return (
     <div>
       <SectionLabel>{t("Effects")}</SectionLabel>
       <AnimSpeedRow />
       <div className="space-y-2.5">
-        <ToggleRow
-          checked={liquidGlass}
-          onToggle={toggleGlass}
-          label={t("Liquid Glass — translucent chrome, panels & controls")}
-          title={t(
-            "Follows the system Reduce Transparency preference, which overrides this",
-          )}
-        />
         <ToggleRow
           checked={ambientMotion}
           onToggle={toggleAmbient}
