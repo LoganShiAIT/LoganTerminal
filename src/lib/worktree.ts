@@ -1,6 +1,6 @@
 /**
  * Worktree task-name sanitizer — TS mirror of `sanitize_task` in
- * `src-tauri/src/git.rs`, used only for the live branch/path preview in the
+ * `src-tauri/src/git/worktree.rs`, used only for the live branch/path preview in the
  * worktree modal (the Rust side is authoritative at creation). Keep the
  * fixture tables in both test suites identical.
  */

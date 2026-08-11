@@ -18,7 +18,7 @@ export interface ShellIntegration {
 
 /**
  * Consume OSC 133 shell-integration markers (zsh + bash — see the rc files in
- * `src-tauri/src/pty.rs`) on `term`, and turn them into prompt navigation,
+ * `src-tauri/src/pty/shell_init.rs`) on `term`, and turn them into prompt navigation,
  * output selection, exit-code/duration state, and attention signals.
  *
  * Registering directly on xterm's parser keeps markers in perfect sync with

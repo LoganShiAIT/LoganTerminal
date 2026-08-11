@@ -9,6 +9,7 @@ import {
   type PtyTab,
 } from "../../stores/ptyStore";
 import { useT } from "../../i18n";
+import { ZoomRestoreIcon } from "../icons";
 
 /**
  * Renders a tab's pane tree. The tree is flattened into percentage rects and
@@ -245,19 +246,3 @@ export default function PaneTree({
   );
 }
 
-function ZoomRestoreIcon() {
-  return (
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9.5 6.5h3v-3M6.5 9.5h-3v3M12.5 3.5 9.5 6.5M3.5 12.5l3-3" />
-    </svg>
-  );
-}

@@ -10,136 +10,19 @@ import { sendTermCmd } from "../../lib/termBus";
 import { revealTarget } from "../../lib/reveal";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
+import {
+  EyeIcon,
+  FileIcon,
+  FolderIcon,
+  RefreshIcon,
+  SearchIcon,
+  SplitIcon,
+  TerminalPlusIcon,
+} from "../icons";
 
 interface FsEntry {
   name: string;
   is_dir: boolean;
-}
-
-function FolderIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinejoin="round"
-      className="shrink-0 text-accent/80"
-    >
-      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.9l1.4 1.7h4.7A1.5 1.5 0 0 1 14 6.2v5.3a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7Z" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinejoin="round"
-      className="shrink-0 text-faint"
-    >
-      <path d="M4 2.5h5L12.5 6v7a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 .5-1Z" />
-      <path d="M9 2.5V6h3.5" />
-    </svg>
-  );
-}
-
-function EyeIcon({ off }: { off: boolean }) {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M1.8 8s2.2-4 6.2-4 6.2 4 6.2 4-2.2 4-6.2 4S1.8 8 1.8 8Z" />
-      <circle cx="8" cy="8" r="1.7" />
-      {off && <path d="M2.5 13.5 13.5 2.5" />}
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    >
-      <circle cx="7" cy="7" r="4.3" />
-      <path d="m10.3 10.3 3.2 3.2" />
-    </svg>
-  );
-}
-
-function TerminalPlusIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 3.5h9a1 1 0 0 1 1 1v6" />
-      <path d="M4.6 6.2 6.4 8l-1.8 1.8M7.6 10.2h2.2" />
-      <path d="M2 3.5v8a1 1 0 0 0 1 1h4.2" />
-      <path d="M11.6 11v4M9.6 13h4" />
-    </svg>
-  );
-}
-
-function SplitIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinejoin="round"
-    >
-      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
-      <path d="M8 3v10" />
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
-      <path d="M13.5 1.8v2.7h-2.7" />
-    </svg>
-  );
 }
 
 export default function FileTree() {

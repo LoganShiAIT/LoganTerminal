@@ -12,27 +12,10 @@ import {
 import DiffFileTree from "./DiffFileTree";
 import CommitLog from "./CommitLog";
 import { useT } from "../../i18n";
+import { RefreshIcon } from "../icons";
 
 /** How far back the history view reads. Deep enough to see a fork, cheap. */
 const LOG_LIMIT = 120;
-
-function RefreshIcon() {
-  return (
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3" />
-    </svg>
-  );
-}
 
 /**
  * Git review panel for the active pane's repository, in three views:

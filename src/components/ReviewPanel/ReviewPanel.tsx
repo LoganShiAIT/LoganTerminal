@@ -11,6 +11,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { REVIEW_LIST_DEFAULT, useUiStore } from "../../stores/uiStore";
 import { basename, isMarkdownPath, joinPath } from "../../lib/paths";
 import { shellEscapePath } from "../../lib/shellEscape";
+import { useDragResize } from "../../lib/useDragResize";
 import MarkdownPreview from "../MarkdownPreview/MarkdownPreview";
 import { t, useT } from "../../i18n";
 
@@ -119,28 +120,13 @@ export default function ReviewPanel() {
 
   const selectedName = info?.name ?? (selectedPath ? basename(selectedPath) : "");
 
-  // Dragging sets the height from the pointer's absolute position rather than
-  // a delta, so hitting a clamp never leaves the divider drifting behind the
-  // cursor — it re-attaches the moment you drag back.
-  const startDrag = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // The divider position is measured against the split container, so the
+  // reader below always keeps MIN_CONTENT_HEIGHT however far you drag.
+  const startDrag = useDragResize("y", (y) => {
     const rect = splitRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const onMove = (move: MouseEvent) => {
-      const max = rect.height - MIN_CONTENT_HEIGHT;
-      setListHeight(Math.min(move.clientY - rect.top, max));
-    };
-    const onUp = () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
+    setListHeight(Math.min(y - rect.top, rect.height - MIN_CONTENT_HEIGHT));
+  });
 
   const insertPath = async () => {
     if (!activeSessionId || !selectedPath) return;

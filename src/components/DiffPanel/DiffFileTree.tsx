@@ -10,6 +10,7 @@ import { classifyDiffLine, type DiffFile, type DiffLineKind } from "../../lib/gi
 import { joinPath } from "../../lib/paths";
 import { attachReviewPaths } from "../../lib/reviewAttachments";
 import { useT } from "../../i18n";
+import { CollapseIcon, ToReviewIcon } from "../icons";
 
 const LINE_CLASS: Record<DiffLineKind, string> = {
   add: "text-emerald-300 bg-emerald-500/[0.07]",
@@ -41,49 +42,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function CollapseIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M2.5 8h11" />
-      {collapsed ? (
-        <path d="M5.5 4.5 8 2l2.5 2.5M5.5 11.5 8 14l2.5-2.5" />
-      ) : (
-        <path d="M5.5 3.5 8 6l2.5-2.5M5.5 12.5 8 10l2.5 2.5" />
-      )}
-    </svg>
-  );
-}
-
 /** An arrow heading into the side panel: "send this file to the reviewer". */
-function ToReviewIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M9.8 2.8h2.7a1 1 0 0 1 1 1v8.4a1 1 0 0 1-1 1H9.8" />
-      <path d="M2.5 8h6.2M6.4 5.6 8.8 8l-2.4 2.4" />
-    </svg>
-  );
-}
-
 function Patch({ text }: { text: string }) {
   const t = useT();
   if (!text.trim()) {

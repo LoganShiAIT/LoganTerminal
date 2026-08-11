@@ -1,245 +1,38 @@
 import { create } from "zustand";
 import type { GitDirty } from "../lib/git";
 import { dirLabel } from "../lib/paths";
+import {
+  activeLeafOf,
+  attentionPanes,
+  collectLeaves,
+  findLeaf,
+  findParentSplit,
+  firstLeaf,
+  makeLeaf,
+  makeSplit,
+  makeTab,
+  removeLeafFrom,
+  splitLeafIn,
+  updateLeafIn,
+  updateSplitRatioIn,
+  MAX_PANES_PER_TAB,
+  type LeafPane,
+  type PaneNode,
+  type PtyTab,
+} from "./paneTree";
+import { loadSnapshotTabs, saveSnapshot } from "./tabSnapshot";
 
-/** A terminal pane holding one PTY session. */
-export interface LeafPane {
-  type: "leaf";
-  id: string;
-  sessionId: string | null;
-  cwd: string | null;
-  agentName: string | null;
-  /**
-   * When the detected agent in this pane last finished a turn and went quiet
-   * waiting on the user — i.e. the moment the idle clock starts. Set by
-   * `setPaneBusy` on the busy→idle edge, cleared the moment work resumes, so
-   * the timer measures how long the human has been sitting on their reply
-   * (which is what the prompt-cache window actually counts), not how long the
-   * agent took to answer.
-   */
-  agentIdleSinceAt: number | null;
-  /** Shell/app-set window title (OSC 0/2); tab label prefers it over cwd. */
-  title: string | null;
-  initialCwd: string | null;
-  /**
-   * Git branch of cwd (read from .git/HEAD on every OSC 7 prompt event);
-   * null = not a repository / unknown.
-   */
-  gitBranch: string | null;
-  /**
-   * Working-tree dirty counts (`git status --porcelain`), refreshed with
-   * the branch on every OSC 7 prompt event. null = clean-or-unknown; the
-   * chip treats an all-zero value the same way.
-   */
-  gitDirty: GitDirty | null;
-  /**
-   * One-shot command typed into the shell right after spawn (fleet tabs).
-   * Session-only by design: the tab snapshot never carries it, so restored
-   * tabs come back as plain shells and never auto-re-run anything.
-   */
-  initialCmd: string | null;
-  /** The shell process ended; the pane stays visible but accepts no input. */
-  exited: boolean;
-  /**
-   * Exit code of the last completed command (OSC 133;D via shell
-   * integration, zsh/bash — see Terminal.tsx). Null while a command is
-   * running or none has finished yet.
-   */
-  lastExitCode: number | null;
-  /**
-   * Wall-clock duration of the last completed command (OSC 133 C→D span).
-   * Null while running, when no command finished yet, or when the shell
-   * never emitted C (bash < 4.4 has no PS0).
-   */
-  lastDurationMs: number | null;
-  /** Output arrived while this pane wasn't the focused one; see markUnread. */
-  unread: boolean;
-  /**
-   * A strong "needs a human" signal fired while the pane wasn't watched:
-   * BEL (agent TUIs ring when blocked on input) or a ≥10s command
-   * finishing. Deliberately NOT set by ordinary background output — that's
-   * what `unread` is for. Cleared alongside unread when the pane becomes
-   * watched.
-   */
-  attention: boolean;
-  /**
-   * The pane is producing sustained output right now — i.e. something is
-   * actually running in it. Driven by pty data in Terminal.tsx (keystroke
-   * echo excluded) and cleared after a short silence, so an agent CLI that
-   * merely sits at its prompt reads as idle. Session-only, never persisted.
-   */
-  busy: boolean;
-}
-
-export interface SplitPane {
-  type: "split";
-  id: string;
-  /** "row" = panes side by side; "col" = stacked. */
-  dir: "row" | "col";
-  /** Size share of child `a`, clamped to RATIO_MIN..RATIO_MAX. */
-  ratio: number;
-  a: PaneNode;
-  b: PaneNode;
-}
-
-export type PaneNode = LeafPane | SplitPane;
-
-export interface PtyTab {
-  id: string;
-  root: PaneNode;
-  activePaneId: string;
-  /** Output arrived while the tab was in the background; cleared on activation. */
-  unread: boolean;
-  /** Non-null while one pane is temporarily maximized (⌘⇧Z) over its siblings. */
-  zoomedPaneId: string | null;
-  /**
-   * Keystrokes in the focused pane fan out to every live pane in this tab
-   * (tmux synchronize-panes). Deliberately not persisted in the tab
-   * snapshot: a forgotten fanout switch surviving a restart is a footgun.
-   */
-  broadcast: boolean;
-}
-
-export const MAX_PANES_PER_TAB = 8;
-const RATIO_MIN = 0.15;
-const RATIO_MAX = 0.85;
-
-function clampRatio(r: number): number {
-  return Math.max(RATIO_MIN, Math.min(RATIO_MAX, r));
-}
-
-function makeLeaf(
-  initialCwd: string | null = null,
-  initialCmd: string | null = null,
-): LeafPane {
-  return {
-    type: "leaf",
-    id: crypto.randomUUID(),
-    sessionId: null,
-    cwd: null,
-    agentName: null,
-    agentIdleSinceAt: null,
-    title: null,
-    initialCwd,
-    gitBranch: null,
-    gitDirty: null,
-    initialCmd,
-    exited: false,
-    lastExitCode: null,
-    lastDurationMs: null,
-    unread: false,
-    attention: false,
-    busy: false,
-  };
-}
-
-function makeTab(root: PaneNode): PtyTab {
-  return {
-    id: crypto.randomUUID(),
-    root,
-    activePaneId: firstLeaf(root).id,
-    unread: false,
-    zoomedPaneId: null,
-    broadcast: false,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Pane-tree helpers (exported ones are used by components).
-
-export function collectLeaves(node: PaneNode): LeafPane[] {
-  if (node.type === "leaf") return [node];
-  return [...collectLeaves(node.a), ...collectLeaves(node.b)];
-}
-
-export function firstLeaf(node: PaneNode): LeafPane {
-  return node.type === "leaf" ? node : firstLeaf(node.a);
-}
-
-export function findLeaf(node: PaneNode, paneId: string): LeafPane | undefined {
-  if (node.type === "leaf") return node.id === paneId ? node : undefined;
-  return findLeaf(node.a, paneId) ?? findLeaf(node.b, paneId);
-}
-
-/** The leaf a tab's UI (label, status bar, inserts) should represent. */
-export function activeLeafOf(tab: PtyTab): LeafPane {
-  return findLeaf(tab.root, tab.activePaneId) ?? firstLeaf(tab.root);
-}
-
-/** Immutable leaf update; untouched subtrees keep their identity. */
-function updateLeafIn(
-  node: PaneNode,
-  paneId: string,
-  fn: (leaf: LeafPane) => LeafPane,
-): PaneNode {
-  if (node.type === "leaf") {
-    return node.id === paneId ? fn(node) : node;
-  }
-  const a = updateLeafIn(node.a, paneId, fn);
-  const b = updateLeafIn(node.b, paneId, fn);
-  return a === node.a && b === node.b ? node : { ...node, a, b };
-}
-
-function updateSplitRatioIn(
-  node: PaneNode,
-  splitId: string,
-  ratio: number,
-): PaneNode {
-  if (node.type === "leaf") return node;
-  if (node.id === splitId) return { ...node, ratio: clampRatio(ratio) };
-  const a = updateSplitRatioIn(node.a, splitId, ratio);
-  const b = updateSplitRatioIn(node.b, splitId, ratio);
-  return a === node.a && b === node.b ? node : { ...node, a, b };
-}
-
-function splitLeafIn(
-  node: PaneNode,
-  paneId: string,
-  dir: "row" | "col",
-  newLeaf: LeafPane,
-): PaneNode {
-  if (node.type === "leaf") {
-    if (node.id !== paneId) return node;
-    return {
-      type: "split",
-      id: crypto.randomUUID(),
-      dir,
-      ratio: 0.5,
-      a: node,
-      b: newLeaf,
-    };
-  }
-  const a = splitLeafIn(node.a, paneId, dir, newLeaf);
-  const b = splitLeafIn(node.b, paneId, dir, newLeaf);
-  return a === node.a && b === node.b ? node : { ...node, a, b };
-}
-
-/** Returns null when `node` itself is the removed leaf. */
-function removeLeafFrom(node: PaneNode, paneId: string): PaneNode | null {
-  if (node.type === "leaf") return node.id === paneId ? null : node;
-  const a = removeLeafFrom(node.a, paneId);
-  if (a === null) return node.b;
-  const b = removeLeafFrom(node.b, paneId);
-  if (b === null) return node.a;
-  return a === node.a && b === node.b ? node : { ...node, a, b };
-}
-
-function findParentSplit(
-  node: PaneNode,
-  paneId: string,
-): SplitPane | undefined {
-  if (node.type === "leaf") return undefined;
-  if (
-    (node.a.type === "leaf" && node.a.id === paneId) ||
-    (node.b.type === "leaf" && node.b.id === paneId)
-  ) {
-    return node;
-  }
-  return findParentSplit(node.a, paneId) ?? findParentSplit(node.b, paneId);
-}
-
-// ---------------------------------------------------------------------------
-// Store
+// The pane tree's types and pure helpers are re-exported so consumers keep
+// importing everything terminal-related from one place.
+export {
+  activeLeafOf,
+  attentionPanes,
+  collectLeaves,
+  findLeaf,
+  firstLeaf,
+  MAX_PANES_PER_TAB,
+} from "./paneTree";
+export type { LeafPane, PaneNode, PtyTab, SplitPane } from "./paneTree";
 
 interface PtyStore {
   tabs: PtyTab[];
@@ -258,7 +51,6 @@ interface PtyStore {
   moveTab: (from: number, to: number) => void;
   cycleTab: (dir: 1 | -1) => void;
   jumpToTab: (index: number) => void;
-  /** Split the active pane of the active tab; focuses the new pane. */
   /**
    * Split the focused pane. `cwd` overrides where the new pane starts —
    * the file tree uses it to open a split directly in a browsed folder
@@ -323,91 +115,6 @@ function withUnreadCleared(tabs: PtyTab[], activeId: string | null): PtyTab[] {
   });
 }
 
-/** Every pane currently flagged for attention, in tab order. */
-export function attentionPanes(
-  tabs: PtyTab[],
-): Array<{ tab: PtyTab; tabIndex: number; leaf: LeafPane }> {
-  const out: Array<{ tab: PtyTab; tabIndex: number; leaf: LeafPane }> = [];
-  tabs.forEach((tab, tabIndex) => {
-    for (const leaf of collectLeaves(tab.root)) {
-      if (leaf.attention) out.push({ tab, tabIndex, leaf });
-    }
-  });
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// Snapshot persistence: the pane tree serializes to nested {dir,ratio,a,b}
-// with leaves as cwd strings. The legacy format (flat cwd array) is a valid
-// subset — a bare string deserializes to a single-leaf tab.
-
-type PaneSnapshot =
-  | string
-  | null
-  | { dir: "row" | "col"; ratio: number; a: PaneSnapshot; b: PaneSnapshot };
-
-const SNAPSHOT_KEY = "logan.tabSnapshot";
-const MAX_RESTORED_TABS = 9;
-/** Depth 3 caps a restored tab at 8 leaves = MAX_PANES_PER_TAB. */
-const MAX_RESTORE_DEPTH = 3;
-
-function serializeNode(node: PaneNode): PaneSnapshot {
-  if (node.type === "leaf") return node.cwd ?? node.initialCwd;
-  return {
-    dir: node.dir,
-    ratio: node.ratio,
-    a: serializeNode(node.a),
-    b: serializeNode(node.b),
-  };
-}
-
-function deserializeNode(snap: unknown, depth: number): PaneNode {
-  if (typeof snap === "string") return makeLeaf(snap);
-  if (
-    snap !== null &&
-    typeof snap === "object" &&
-    "a" in snap &&
-    "b" in snap &&
-    depth < MAX_RESTORE_DEPTH
-  ) {
-    const s = snap as { dir?: unknown; ratio?: unknown; a: unknown; b: unknown };
-    return {
-      type: "split",
-      id: crypto.randomUUID(),
-      dir: s.dir === "col" ? "col" : "row",
-      ratio: clampRatio(Number(s.ratio) || 0.5),
-      a: deserializeNode(s.a, depth + 1),
-      b: deserializeNode(s.b, depth + 1),
-    };
-  }
-  return makeLeaf(null);
-}
-
-function loadSnapshotTabs(): PtyTab[] {
-  try {
-    const raw = localStorage.getItem(SNAPSHOT_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .slice(0, MAX_RESTORED_TABS)
-      .map((snap) => makeTab(deserializeNode(snap, 0)));
-  } catch {
-    return [];
-  }
-}
-
-function saveSnapshot(tabs: PtyTab[]) {
-  try {
-    localStorage.setItem(
-      SNAPSHOT_KEY,
-      JSON.stringify(tabs.map((t) => serializeNode(t.root))),
-    );
-  } catch {
-    // localStorage unavailable or quota exceeded — session restore is best-effort.
-  }
-}
-
 const restoredTabs = loadSnapshotTabs();
 const initialTabs =
   restoredTabs.length > 0 ? restoredTabs : [makeTab(makeLeaf())];
@@ -421,6 +128,15 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       }),
     }));
 
+  /** Replace one tab in place; other tabs keep their identity. */
+  const updateTab = (tabId: string, fn: (tab: PtyTab) => PtyTab) =>
+    set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? fn(t) : t)) }));
+
+  const activeTab = () => {
+    const s = get();
+    return s.tabs.find((t) => t.id === s.activeTabId);
+  };
+
   return {
     tabs: initialTabs,
     activeTabId: initialTabs[0].id,
@@ -433,41 +149,19 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     },
 
     addFleetTab: (panes, cmd) => {
-      const s = get();
-      const activeTab = s.tabs.find((t) => t.id === s.activeTabId);
-      const cwd = activeTab
-        ? (activeLeafOf(activeTab).cwd ?? activeLeafOf(activeTab).initialCwd)
-        : null;
+      const tab = activeTab();
+      const source = tab ? activeLeafOf(tab) : null;
+      const cwd = source ? (source.cwd ?? source.initialCwd) : null;
       const startCmd = cmd?.trim() || null;
-      const pair = (): SplitPane => ({
-        type: "split",
-        id: crypto.randomUUID(),
-        dir: "col",
-        ratio: 0.5,
-        a: makeLeaf(cwd, startCmd),
-        b: makeLeaf(cwd, startCmd),
-      });
+      const leaf = () => makeLeaf(cwd, startCmd);
+      const pair = () => makeSplit("col", leaf(), leaf());
       const root: PaneNode =
         panes === 2
-          ? {
-              type: "split",
-              id: crypto.randomUUID(),
-              dir: "row",
-              ratio: 0.5,
-              a: makeLeaf(cwd, startCmd),
-              b: makeLeaf(cwd, startCmd),
-            }
-          : {
-              type: "split",
-              id: crypto.randomUUID(),
-              dir: "row",
-              ratio: 0.5,
-              a: pair(),
-              b: pair(),
-            };
-      const tab = makeTab(root);
-      set((st) => ({ tabs: [...st.tabs, tab], activeTabId: tab.id }));
-      return tab.id;
+          ? makeSplit("row", leaf(), leaf())
+          : makeSplit("row", pair(), pair());
+      const fleet = makeTab(root);
+      set((s) => ({ tabs: [...s.tabs, fleet], activeTabId: fleet.id }));
+      return fleet.id;
     },
 
     closeTab: (id) => {
@@ -477,6 +171,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         const tabs = s.tabs.filter((t) => t.id !== id);
         let activeTabId = s.activeTabId;
         if (activeTabId === id) {
+          // Focus the tab that slid into this slot, else the one before it.
           const fallback = tabs[idx] ?? tabs[idx - 1];
           activeTabId = fallback ? fallback.id : null;
         }
@@ -507,8 +202,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       const { tabs, activeTabId } = get();
       if (tabs.length === 0) return;
       const idx = tabs.findIndex((t) => t.id === activeTabId);
-      const next = (idx + dir + tabs.length) % tabs.length;
-      get().setActiveTab(tabs[next].id);
+      get().setActiveTab(tabs[(idx + dir + tabs.length) % tabs.length].id);
     },
 
     jumpToTab: (index) => {
@@ -517,27 +211,24 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       get().setActiveTab(tabs[index].id);
     },
 
-    splitPane: (dir, cwd) =>
-      set((s) => {
-        const tab = s.tabs.find((t) => t.id === s.activeTabId);
-        if (!tab) return s;
-        if (collectLeaves(tab.root).length >= MAX_PANES_PER_TAB) return s;
-        const source = activeLeafOf(tab);
-        const newLeaf = makeLeaf(cwd ?? source.cwd ?? source.initialCwd);
-        const root = splitLeafIn(tab.root, source.id, dir, newLeaf);
-        if (root === tab.root) return s;
-        return {
-          tabs: s.tabs.map((t) =>
-            t.id === tab.id
-              ? { ...t, root, activePaneId: newLeaf.id, zoomedPaneId: null }
-              : t,
-          ),
-        };
-      }),
+    splitPane: (dir, cwd) => {
+      const tab = activeTab();
+      if (!tab) return;
+      if (collectLeaves(tab.root).length >= MAX_PANES_PER_TAB) return;
+      const source = activeLeafOf(tab);
+      const newLeaf = makeLeaf(cwd ?? source.cwd ?? source.initialCwd);
+      const root = splitLeafIn(tab.root, source.id, dir, newLeaf);
+      if (root === tab.root) return;
+      updateTab(tab.id, (t) => ({
+        ...t,
+        root,
+        activePaneId: newLeaf.id,
+        zoomedPaneId: null,
+      }));
+    },
 
     closeActivePane: () => {
-      const s = get();
-      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      const tab = activeTab();
       if (!tab) return;
       if (tab.root.type === "leaf") {
         get().closeTab(tab.id);
@@ -551,60 +242,55 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         (parent.a.type === "leaf" && parent.a.id === paneId
           ? parent.b
           : parent.a);
-      set((st) => ({
-        tabs: st.tabs.map((t) => {
-          if (t.id !== tab.id) return t;
-          const root = removeLeafFrom(t.root, paneId);
-          if (root === null || root === t.root) return t;
-          const nextActive = sibling ? firstLeaf(sibling).id : firstLeaf(root).id;
-          return { ...t, root, activePaneId: nextActive, zoomedPaneId: null };
-        }),
-      }));
+      updateTab(tab.id, (t) => {
+        const root = removeLeafFrom(t.root, paneId);
+        if (root === null || root === t.root) return t;
+        return {
+          ...t,
+          root,
+          activePaneId: sibling ? firstLeaf(sibling).id : firstLeaf(root).id,
+          zoomedPaneId: null,
+        };
+      });
     },
 
     setActivePane: (tabId, paneId) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) => {
-          if (t.id !== tabId) return t;
-          const root = updateLeafIn(t.root, paneId, (l) =>
-            l.unread || l.attention
-              ? { ...l, unread: false, attention: false }
-              : l,
-          );
-          if (t.activePaneId === paneId && root === t.root) return t;
-          return { ...t, activePaneId: paneId, root };
-        }),
-      })),
+      updateTab(tabId, (t) => {
+        const root = updateLeafIn(t.root, paneId, (l) =>
+          l.unread || l.attention
+            ? { ...l, unread: false, attention: false }
+            : l,
+        );
+        if (t.activePaneId === paneId && root === t.root) return t;
+        return { ...t, activePaneId: paneId, root };
+      }),
 
     cyclePane: (dir) => {
-      const s = get();
-      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      const tab = activeTab();
       if (!tab) return;
       const leaves = collectLeaves(tab.root);
       if (leaves.length < 2) return;
       const idx = leaves.findIndex((l) => l.id === tab.activePaneId);
-      const next = leaves[(idx + dir + leaves.length) % leaves.length];
-      get().setActivePane(tab.id, next.id);
+      get().setActivePane(
+        tab.id,
+        leaves[(idx + dir + leaves.length) % leaves.length].id,
+      );
     },
 
-    toggleZoom: () =>
-      set((s) => {
-        const tab = s.tabs.find((t) => t.id === s.activeTabId);
-        if (!tab || tab.root.type === "leaf") return s;
-        const zoomedPaneId = tab.zoomedPaneId ? null : tab.activePaneId;
-        return {
-          tabs: s.tabs.map((t) => (t.id === tab.id ? { ...t, zoomedPaneId } : t)),
-        };
-      }),
+    toggleZoom: () => {
+      const tab = activeTab();
+      if (!tab || tab.root.type === "leaf") return;
+      updateTab(tab.id, (t) => ({
+        ...t,
+        zoomedPaneId: t.zoomedPaneId ? null : t.activePaneId,
+      }));
+    },
 
     setSplitRatio: (tabId, splitId, ratio) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) => {
-          if (t.id !== tabId) return t;
-          const root = updateSplitRatioIn(t.root, splitId, ratio);
-          return root === t.root ? t : { ...t, root };
-        }),
-      })),
+      updateTab(tabId, (t) => {
+        const root = updateSplitRatioIn(t.root, splitId, ratio);
+        return root === t.root ? t : { ...t, root };
+      }),
 
     setSessionId: (paneId, sessionId) =>
       updatePane(paneId, (l) => ({ ...l, sessionId })),
@@ -675,13 +361,11 @@ export const usePtyStore = create<PtyStore>((set, get) => {
 
     markUnread: (tabId, paneId) =>
       set((s) => {
-        const tabIdx = s.tabs.findIndex((t) => t.id === tabId);
-        if (tabIdx === -1) return s;
-        const tab = s.tabs[tabIdx];
+        const tab = s.tabs.find((t) => t.id === tabId);
+        if (!tab) return s;
         const tabIsActive = tabId === s.activeTabId;
-        const paneIsFocused = paneId === tab.activePaneId;
         // Both true: this exact pane is the one being watched right now.
-        if (tabIsActive && paneIsFocused) return s;
+        if (tabIsActive && paneId === tab.activePaneId) return s;
 
         const root = updateLeafIn(tab.root, paneId, (l) =>
           l.unread ? l : { ...l, unread: true },
@@ -689,33 +373,28 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         // Tab-level dot keeps its pre-existing meaning: "the whole tab was
         // in the background" — untouched when the tab itself is active,
         // even if a non-focused sibling pane just produced output.
-        const nextTabUnread = tabIsActive ? tab.unread : true;
-        if (root === tab.root && nextTabUnread === tab.unread) return s;
-
-        const tabs = [...s.tabs];
-        tabs[tabIdx] = { ...tab, root, unread: nextTabUnread };
-        return { tabs };
+        const unread = tabIsActive ? tab.unread : true;
+        if (root === tab.root && unread === tab.unread) return s;
+        return {
+          tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, root, unread } : t)),
+        };
       }),
 
     markAttention: (tabId, paneId) =>
       set((s) => {
-        const tabIdx = s.tabs.findIndex((t) => t.id === tabId);
-        if (tabIdx === -1) return s;
-        const tab = s.tabs[tabIdx];
+        const tab = s.tabs.find((t) => t.id === tabId);
+        if (!tab) return s;
         // Watched right now → nothing to flag (same rule as markUnread).
         if (tabId === s.activeTabId && paneId === tab.activePaneId) return s;
         const root = updateLeafIn(tab.root, paneId, (l) =>
           l.attention ? l : { ...l, attention: true },
         );
         if (root === tab.root) return s;
-        const tabs = [...s.tabs];
-        tabs[tabIdx] = { ...tab, root };
-        return { tabs };
+        return { tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, root } : t)) };
       }),
 
     jumpToAttention: () => {
-      const s = get();
-      const hit = attentionPanes(s.tabs)[0];
+      const hit = attentionPanes(get().tabs)[0];
       if (!hit) return false;
       // setActiveTab clears the *current* focused pane's markers; ordering
       // matters — activate the tab first, then focus the flagged pane
@@ -726,11 +405,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     },
 
     toggleBroadcast: (tabId) =>
-      set((s) => ({
-        tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, broadcast: !t.broadcast } : t,
-        ),
-      })),
+      updateTab(tabId, (t) => ({ ...t, broadcast: !t.broadcast })),
 
     markPaneExited: (paneId) =>
       updatePane(paneId, (l) => ({ ...l, exited: true, busy: false })),
@@ -751,6 +426,13 @@ export function useActivePane(): LeafPane | undefined {
   });
 }
 
+/** Non-hook accessor for event handlers. */
+export function getActiveLeaf(): LeafPane | undefined {
+  const s = usePtyStore.getState();
+  const tab = s.tabs.find((t) => t.id === s.activeTabId);
+  return tab ? activeLeafOf(tab) : undefined;
+}
+
 /**
  * Short "where did this happen" label for a pane — its directory's last
  * segment, or "shell" before the first OSC 7 lands. Used by notification
@@ -760,13 +442,6 @@ export function paneWhere(tabId: string, paneId: string): string {
   const tab = usePtyStore.getState().tabs.find((t) => t.id === tabId);
   const cwd = tab ? findLeaf(tab.root, paneId)?.cwd : null;
   return cwd ? dirLabel(cwd) : "shell";
-}
-
-/** Non-hook accessor for event handlers. */
-export function getActiveLeaf(): LeafPane | undefined {
-  const s = usePtyStore.getState();
-  const tab = s.tabs.find((t) => t.id === s.activeTabId);
-  return tab ? activeLeafOf(tab) : undefined;
 }
 
 usePtyStore.subscribe((state, prevState) => {

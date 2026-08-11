@@ -3,7 +3,7 @@ import { sanitizeTask } from "./worktree";
 
 describe("sanitizeTask", () => {
   it("matches the Rust fixture table exactly", () => {
-    // Keep identical to sanitize_task_fixture_table in src-tauri/src/git.rs.
+    // Keep identical to sanitize_task_fixture_table in src-tauri/src/git/worktree.rs.
     const cases: Array<[string, string | null]> = [
       ["Fix Login Flow", "Fix-Login-Flow"],
       ["  padded   name ", "padded-name"],

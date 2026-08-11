@@ -5,39 +5,24 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import {
-  usePtyStore,
-  findLeaf,
-  collectLeaves,
-  paneWhere,
-} from "../../stores/ptyStore";
+import { usePtyStore, findLeaf, paneWhere } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useMathStore } from "../../stores/mathStore";
-import { buildXtermTheme, buildSearchDecorations } from "../../themes";
+import { buildXtermTheme } from "../../themes";
 import { onTermCmd } from "../../lib/termBus";
 import { notify } from "../../lib/notify";
 import { openTerminalLink } from "../../lib/openLink";
 import { hasAppMod } from "../../lib/keys";
 import { installShellIntegration } from "../../lib/shellIntegration";
 import { installMathAwareness } from "../../lib/mathAwareness";
-import type { GitStatusInfo } from "../../lib/git";
-import "@xterm/xterm/css/xterm.css";
+import { attachPtySession } from "../../lib/ptySession";
 import { t } from "../../i18n";
+import { ChevronIcon } from "../icons";
+import TerminalSearch from "./TerminalSearch";
+import "@xterm/xterm/css/xterm.css";
 
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
-/**
- * Silence after which a pane counts as idle again. Generous on purpose: a
- * working agent CLI redraws its spinner every ~100ms, but one stuck in a
- * long tool call may only tick its elapsed counter once a second.
- */
-const BUSY_IDLE_MS = 1_500;
-/** Output this soon after a keystroke is assumed to be its echo, not work. */
-const ECHO_WINDOW_MS = 250;
-const BRACKETED_PASTE_START = "\x1b[200~";
-const BRACKETED_PASTE_END = "\x1b[201~";
 
 interface TerminalProps {
   tabId: string;
@@ -46,24 +31,15 @@ interface TerminalProps {
   initialCwd?: string | null;
 }
 
-function searchDecorations() {
-  const s = useSettingsStore.getState();
-  return buildSearchDecorations(s.themeId, s.accentOverride);
-}
-
-function submitsPrompt(data: string): boolean {
-  // Prompt snippets and multi-line paste should not look like "sent" just
-  // because their pasted body contains line breaks. The user's Enter arrives
-  // as a separate \r after the paste lands.
-  if (
-    data.includes(BRACKETED_PASTE_START) &&
-    data.includes(BRACKETED_PASTE_END)
-  ) {
-    return false;
-  }
-  return data.includes("\r") || data.includes("\n");
-}
-
+/**
+ * One xterm instance bound to one pane.
+ *
+ * This component owns the *terminal*: the addons, the theme, the per-terminal
+ * shortcuts, and the term-bus commands the chrome sends it. The backend PTY
+ * behind it lives in [`attachPtySession`], and the scrollback search bar in
+ * [`TerminalSearch`] — both are lifecycle-heavy enough to be worth their own
+ * files.
+ */
 export default function Terminal({
   tabId,
   paneId,
@@ -73,16 +49,12 @@ export default function Terminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [matchInfo, setMatchInfo] = useState<{
-    index: number;
-    count: number;
-  } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const activeRef = useRef(active);
   /** Set by the mount effect; lets other effects ask for a rescan. */
   const scanMathRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     activeRef.current = active;
     // Becoming the focused pane makes this terminal the auto-follow source.
@@ -135,228 +107,42 @@ export default function Terminal({
     termRef.current = term;
     searchRef.current = search;
 
-    const searchResults = search.onDidChangeResults(
-      ({ resultIndex, resultCount }) => {
-        setMatchInfo({ index: resultIndex, count: resultCount });
-      },
-    );
-
     const shell = installShellIntegration(term, { tabId, paneId });
+    const math = installMathAwareness(term, {
+      isActive: () => activeRef.current,
+    });
+    scanMathRef.current = math.scheduleScan;
+    const session = attachPtySession(term, { tabId, paneId, initialCwd });
 
     const updateAtBottom = () => {
       const buf = term.buffer.active;
       setAtBottom(buf.viewportY >= buf.baseY);
     };
-    const scrollDisposable = term.onScroll(updateAtBottom);
 
-    const math = installMathAwareness(term, {
-      isActive: () => activeRef.current,
-    });
-    scanMathRef.current = math.scheduleScan;
+    const disposables = [
+      term.onScroll(updateAtBottom),
+      term.onWriteParsed(() => {
+        updateAtBottom();
+        math.scheduleScan();
+      }),
+      // OSC 0/2 window title — surfaces on the tab instead of the cwd.
+      term.onTitleChange((title) => {
+        usePtyStore.getState().setPaneTitle(paneId, title.trim() || null);
+      }),
+      term.onBell(makeBellHandler(tabId, paneId)),
+    ];
 
-    const writeDisposable = term.onWriteParsed(() => {
-      updateAtBottom();
-      math.scheduleScan();
-    });
-
-    // BEL: agent CLIs ring it when they need input. Marks the pane dot
-    // (store no-ops when this pane is being watched) and pings the OS when
-    // out of view — the toast names the detected agent when there is one.
-    let lastBellToast = 0;
-    const bellDisposable = term.onBell(() => {
-      const store = usePtyStore.getState();
-      store.markUnread(tabId, paneId);
-      // Strong signal: agent TUIs ring when blocked on input. Store no-ops
-      // when the pane is being watched.
-      store.markAttention(tabId, paneId);
-      if (!useSettingsStore.getState().notifyBell) return;
-      if (document.hasFocus() && store.activeTabId === tabId) return;
-      const now = Date.now();
-      if (now - lastBellToast < BELL_THROTTLE_MS) return;
-      lastBellToast = now;
-      const tab = store.tabs.find((t) => t.id === tabId);
-      const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
-      notify(
-        leaf?.agentName
-          ? t("{name} needs attention", { name: leaf.agentName })
-          : t("Terminal bell"),
-        t("in {where}", { where: paneWhere(tabId, paneId) }),
-      );
-    });
-
-    // OSC 0/2 window title — surfaces on the tab instead of the cwd.
-    const titleDisposable = term.onTitleChange((title) => {
-      usePtyStore.getState().setPaneTitle(paneId, title.trim() || null);
-    });
-
-    // Busy tracking: an agent CLI streams output while it works and falls
-    // silent once it's waiting on the user, so sustained pty output — minus
-    // keystroke echo — is the "a task is running here" signal. Chrome that
-    // animates on a running agent (the header hairline) reads this flag,
-    // which is why merely opening a CLI must not raise it. The falling edge
-    // is also what starts a pane's idle timer (see LeafPane.agentIdleSinceAt).
-    let busy = false;
-    let busyTimer: number | null = null;
-    let lastInputAt = 0;
-    const setBusy = (next: boolean) => {
-      if (busy === next) return;
-      busy = next;
-      usePtyStore.getState().setPaneBusy(paneId, next);
-    };
-    const keepBusy = () => {
-      setBusy(true);
-      if (busyTimer !== null) window.clearTimeout(busyTimer);
-      busyTimer = window.setTimeout(() => {
-        busyTimer = null;
-        setBusy(false);
-      }, BUSY_IDLE_MS);
-    };
-    const clearBusy = () => {
-      if (busyTimer !== null) window.clearTimeout(busyTimer);
-      busyTimer = null;
-      setBusy(false);
-    };
-
-    // Every `pty://…` subscription for the current session, torn down as one
-    // unit — a missed handle here outlives the component and keeps writing
-    // into a disposed terminal.
-    let unlistenAll: UnlistenFn[] = [];
-    const unlistenSession = () => {
-      for (const fn of unlistenAll) fn();
-      unlistenAll = [];
-    };
-    let sessionId: string | null = null;
-    let disposed = false;
-    let spawning = false;
-    let exited = false;
-    let gitStatusInFlight = false;
-
-    const onSize = async () => {
-      if (disposed) return;
+    // Resizing drives the whole session: the first measurement is also what
+    // spawns the shell, since a PTY needs real dimensions to start.
+    const onSize = () => {
       try {
         fit.fit();
       } catch {
         return;
       }
       if (term.cols < 2 || term.rows < 2) return;
-
-      if (!sessionId && !spawning) {
-        spawning = true;
-        try {
-          const id = crypto.randomUUID();
-          sessionId = id;
-          unlistenAll.push(await listen<string>(`pty://data/${id}`, (e) => {
-            term.write(e.payload);
-            // Echo of what the user just typed isn't work being done.
-            if (Date.now() - lastInputAt >= ECHO_WINDOW_MS) keepBusy();
-            // Store no-ops when this pane is the one being watched.
-            usePtyStore.getState().markUnread(tabId, paneId);
-          }));
-          unlistenAll.push(await listen(`pty://exit/${id}`, () => {
-            term.writeln(`\r\n\x1b[31m${t("[process exited]")}\x1b[0m`);
-            exited = true;
-            clearBusy();
-            const store = usePtyStore.getState();
-            store.markPaneExited(paneId);
-            store.markUnread(tabId, paneId);
-          }));
-          unlistenAll.push(await listen<string>(`pty://cwd/${id}`, (e) => {
-            usePtyStore.getState().setCwd(paneId, e.payload);
-            // OSC 7 fires every prompt (not just on chdir), so this also
-            // catches `git checkout` in place — no polling needed. Branch +
-            // dirty counts come back in one round trip; `git status` on a
-            // huge cold repo can be slow, so never stack a second query on
-            // an unfinished one (the next prompt refreshes anyway).
-            if (gitStatusInFlight) return;
-            gitStatusInFlight = true;
-            invoke<GitStatusInfo | null>("git_status", { cwd: e.payload })
-              .then((info) =>
-                usePtyStore
-                  .getState()
-                  .setGitInfo(paneId, info?.branch ?? null, info?.dirty ?? null),
-              )
-              .catch(() => {})
-              .finally(() => {
-                gitStatusInFlight = false;
-              });
-          }));
-          unlistenAll.push(
-            await listen<string | null>(`pty://agent/${id}`, (e) => {
-              usePtyStore.getState().setAgentName(paneId, e.payload ?? null);
-            }),
-          );
-
-          await invoke<string>("pty_spawn", {
-            sessionId: id,
-            rows: term.rows,
-            cols: term.cols,
-            cwd: initialCwd ?? undefined,
-          });
-          if (disposed) {
-            // Unmounted mid-spawn: the effect cleanup already ran (with
-            // these handles still null), so tear the listeners down here
-            // or they outlive the component.
-            invoke("pty_kill", { sessionId: id });
-            unlistenSession();
-            return;
-          }
-          usePtyStore.getState().setSessionId(paneId, id);
-          {
-            // Fleet tabs: type the configured command once, right after
-            // spawn — the pty buffers it until the shell's first prompt
-            // (iTerm2 "send text at start" mechanism). Consumed immediately
-            // so an HMR re-effect or reload can never send it twice.
-            const store = usePtyStore.getState();
-            const tab = store.tabs.find((t) => t.id === tabId);
-            const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
-            if (leaf?.initialCmd) {
-              invoke("pty_write", {
-                sessionId: id,
-                data: leaf.initialCmd + "\r",
-              }).catch(() => {});
-              store.clearInitialCmd(paneId);
-            }
-          }
-          term.onData((data) => {
-            if (!sessionId || exited) return;
-            const submitted = submitsPrompt(data);
-            lastInputAt = Date.now();
-            // Submitting starts the run: light up now rather than waiting
-            // for the agent's first frame to clear the echo window. Busy also
-            // stops the idle timer — it restarts when the agent falls silent.
-            if (submitted) keepBusy();
-            const store = usePtyStore.getState();
-            const tab = store.tabs.find((t) => t.id === tabId);
-            invoke("pty_write", { sessionId, data });
-            // Broadcast: fan the same bytes out to every live sibling pane
-            // (tmux synchronize-panes). Same caveat as tmux: any paste
-            // wrapping follows the *focused* pane's bracketed-paste mode.
-            if (!tab?.broadcast) return;
-            for (const leaf of collectLeaves(tab.root)) {
-              if (leaf.id !== paneId && leaf.sessionId && !leaf.exited) {
-                invoke("pty_write", { sessionId: leaf.sessionId, data });
-                // Siblings run their own busy tracking off their pty output;
-                // stamping their timers from here would fight it.
-              }
-            }
-          });
-        } catch (err) {
-          unlistenSession();
-          sessionId = null;
-          usePtyStore.getState().setSessionId(paneId, null);
-          term.writeln(`\r\n\x1b[31mpty_spawn failed: ${err}\x1b[0m`);
-        } finally {
-          spawning = false;
-        }
-      } else if (sessionId && !exited) {
-        invoke("pty_resize", {
-          sessionId,
-          rows: term.rows,
-          cols: term.cols,
-        });
-      }
+      session.sync(term.rows, term.cols);
     };
-
     const ro = new ResizeObserver(onSize);
     ro.observe(container);
 
@@ -365,10 +151,7 @@ export default function Terminal({
         term.options.fontSize = s.fontSize;
         onSize();
       }
-      if (
-        s.themeId !== prev.themeId ||
-        s.accentOverride !== prev.accentOverride
-      ) {
+      if (s.themeId !== prev.themeId || s.accentOverride !== prev.accentOverride) {
         term.options.theme = buildXtermTheme(s.themeId, s.accentOverride);
       }
       if (s.cursorStyle !== prev.cursorStyle) {
@@ -377,10 +160,7 @@ export default function Terminal({
       if (s.cursorBlink !== prev.cursorBlink) {
         term.options.cursorBlink = s.cursorBlink;
       }
-      if (
-        s.mathInline !== prev.mathInline ||
-        s.mathAutoFollow !== prev.mathAutoFollow
-      ) {
+      if (s.mathInline !== prev.mathInline || s.mathAutoFollow !== prev.mathAutoFollow) {
         // Turning either off must take effect now, not at the next write.
         if (!s.mathInline) math.clearUnderlines();
         math.scheduleScan();
@@ -420,54 +200,28 @@ export default function Terminal({
         case "select-output":
           shell.selectLastOutput();
           break;
-        case "send-selection": {
-          // Prefer what the user highlighted; with nothing selected, fall
-          // back to the last command's output (the formula an agent just
-          // printed is almost always exactly that).
-          let text = term.getSelection();
-          let origin: "selection" | "output" = "selection";
-          if (!text.trim()) {
-            shell.selectLastOutput();
-            text = term.getSelection();
-            origin = "output";
-          }
-          if (text.trim()) useMathStore.getState().setSource(text, origin);
+        case "send-selection":
+          sendSelectionToMath(term, shell.selectLastOutput);
           break;
-        }
       }
     });
 
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current) return;
-      if (!hasAppMod(e)) return;
-      if (e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        useSettingsStore.getState().bumpFontSize(1);
-      } else if (e.key === "-" || e.key === "_") {
-        e.preventDefault();
-        useSettingsStore.getState().bumpFontSize(-1);
-      } else if (e.key === "0") {
-        e.preventDefault();
-        useSettingsStore.getState().resetFontSize();
-      } else if (e.key === "k" || e.key === "K") {
-        e.preventDefault();
-        term.clear();
-      } else if ((e.key === "f" || e.key === "F") && !e.shiftKey) {
-        e.preventDefault();
-        setSearchOpen(true);
-      } else if (e.key === "ArrowUp") {
-        // Mod+arrows (not plain arrows, which stay with shell history).
-        e.preventDefault();
-        shell.jumpToPrompt(-1);
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        shell.jumpToPrompt(1);
-      } else if ((e.key === "a" || e.key === "A") && e.shiftKey) {
-        // iTerm2's "Select Output of Last Command" convention; plain ⌘A is
-        // left alone so select-all behavior stays untouched.
-        e.preventDefault();
-        shell.selectLastOutput();
-      }
+      if (!activeRef.current || !hasAppMod(e)) return;
+      const s = useSettingsStore.getState();
+      if (e.key === "=" || e.key === "+") s.bumpFontSize(1);
+      else if (e.key === "-" || e.key === "_") s.bumpFontSize(-1);
+      else if (e.key === "0") s.resetFontSize();
+      else if (e.key === "k" || e.key === "K") term.clear();
+      else if ((e.key === "f" || e.key === "F") && !e.shiftKey) setSearchOpen(true);
+      // Mod+arrows (not plain arrows, which stay with shell history).
+      else if (e.key === "ArrowUp") shell.jumpToPrompt(-1);
+      else if (e.key === "ArrowDown") shell.jumpToPrompt(1);
+      // iTerm2's "Select Output of Last Command" convention; plain ⌘A is
+      // left alone so select-all behavior stays untouched.
+      else if ((e.key === "a" || e.key === "A") && e.shiftKey) shell.selectLastOutput();
+      else return;
+      e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
 
@@ -475,24 +229,15 @@ export default function Terminal({
     container.addEventListener("mousedown", focusOnClick);
 
     return () => {
-      disposed = true;
       ro.disconnect();
       unsubSettings();
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
-      clearBusy();
-      unlistenSession();
-      if (sessionId && !exited) {
-        invoke("pty_kill", { sessionId });
-      }
-      searchResults.dispose();
+      session.dispose();
+      for (const d of disposables) d.dispose();
       math.dispose();
       scanMathRef.current = null;
-      scrollDisposable.dispose();
-      writeDisposable.dispose();
-      bellDisposable.dispose();
-      titleDisposable.dispose();
       shell.dispose();
       termRef.current = null;
       searchRef.current = null;
@@ -500,110 +245,17 @@ export default function Terminal({
     };
   }, [tabId, paneId, initialCwd]);
 
-  // Focus the search box on open, prefilled from the terminal selection.
-  useEffect(() => {
-    if (!searchOpen) return;
-    const input = searchInputRef.current;
-    if (!input) return;
-    const selection = termRef.current?.getSelection().trim() ?? "";
-    if (selection && !selection.includes("\n")) {
-      input.value = selection;
-      searchRef.current?.findNext(selection, {
-        incremental: true,
-        decorations: searchDecorations(),
-      });
-    }
-    input.focus();
-    input.select();
-  }, [searchOpen]);
-
-  const findNext = () => {
-    const q = searchInputRef.current?.value ?? "";
-    if (q)
-      searchRef.current?.findNext(q, { decorations: searchDecorations() });
-  };
-
-  const findPrev = () => {
-    const q = searchInputRef.current?.value ?? "";
-    if (q)
-      searchRef.current?.findPrevious(q, { decorations: searchDecorations() });
-  };
-
-  const closeSearch = () => {
-    setSearchOpen(false);
-    setMatchInfo(null);
-    searchRef.current?.clearDecorations();
-    termRef.current?.clearSelection();
-    termRef.current?.focus();
-  };
-
   return (
     <div className="relative w-full h-full">
       {/* pl-3 gives the text a gutter; pr-1 keeps the xterm scrollbar near the edge. */}
       <div ref={containerRef} className="w-full h-full pl-3 pr-1 py-2" />
 
       {searchOpen && (
-        <div className="absolute top-1.5 right-3 z-10 flex items-center gap-0.5 h-8 pl-2.5 pr-1 rounded-lg border border-edge bg-raise/95 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.45)] animate-[pop-in_0.12s_ease-out]">
-          <input
-            ref={searchInputRef}
-            type="text"
-            spellCheck={false}
-            placeholder={t("find")}
-            className="w-40 bg-transparent font-mono text-xs text-ink placeholder:text-faint focus:outline-none"
-            onChange={(e) => {
-              const q = e.target.value;
-              if (q) {
-                searchRef.current?.findNext(q, {
-                  incremental: true,
-                  decorations: searchDecorations(),
-                });
-              } else {
-                searchRef.current?.clearDecorations();
-                termRef.current?.clearSelection();
-                setMatchInfo(null);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (e.shiftKey) findPrev();
-                else findNext();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
-                closeSearch();
-              }
-            }}
-          />
-          <span className="font-mono text-[10px] text-faint min-w-[3.2em] text-center shrink-0">
-            {matchInfo
-              ? matchInfo.count > 0
-                ? `${matchInfo.index + 1}/${matchInfo.count}`
-                : "0/0"
-              : ""}
-          </span>
-          <button
-            className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
-            onClick={findPrev}
-            title={t("Previous match (⇧↩)")}
-          >
-            <ChevronIcon dir="up" />
-          </button>
-          <button
-            className="w-6 h-6 grid place-items-center rounded-md text-muted hover:text-ink hover:bg-ink/10 transition-colors"
-            onClick={findNext}
-            title={t("Next match (↩)")}
-          >
-            <ChevronIcon dir="down" />
-          </button>
-          <button
-            className="w-6 h-6 grid place-items-center rounded-md text-[13px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
-            onClick={closeSearch}
-            title={t("Close (esc)")}
-          >
-            ×
-          </button>
-        </div>
+        <TerminalSearch
+          term={termRef.current}
+          search={searchRef.current}
+          onClose={() => setSearchOpen(false)}
+        />
       )}
 
       {!atBottom && (
@@ -622,20 +274,46 @@ export default function Terminal({
   );
 }
 
-function ChevronIcon({ dir }: { dir: "up" | "down" }) {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={dir === "up" ? "rotate-180" : ""}
-    >
-      <path d="M3.5 6l4.5 4.5L12.5 6" />
-    </svg>
-  );
+/**
+ * BEL: agent CLIs ring it when they need input. Marks the pane dot (the store
+ * no-ops when this pane is being watched) and pings the OS when out of view —
+ * the toast names the detected agent when there is one.
+ */
+function makeBellHandler(tabId: string, paneId: string) {
+  let lastToast = 0;
+  return () => {
+    const store = usePtyStore.getState();
+    store.markUnread(tabId, paneId);
+    // Strong signal: agent TUIs ring when blocked on input.
+    store.markAttention(tabId, paneId);
+    if (!useSettingsStore.getState().notifyBell) return;
+    if (document.hasFocus() && store.activeTabId === tabId) return;
+    const now = Date.now();
+    if (now - lastToast < BELL_THROTTLE_MS) return;
+    lastToast = now;
+    const tab = store.tabs.find((tb) => tb.id === tabId);
+    const leaf = tab ? findLeaf(tab.root, paneId) : undefined;
+    notify(
+      leaf?.agentName
+        ? t("{name} needs attention", { name: leaf.agentName })
+        : t("Terminal bell"),
+      t("in {where}", { where: paneWhere(tabId, paneId) }),
+    );
+  };
+}
+
+/**
+ * Prefer what the user highlighted; with nothing selected, fall back to the
+ * last command's output — the formula an agent just printed is almost always
+ * exactly that.
+ */
+function sendSelectionToMath(term: XTerm, selectLastOutput: () => void) {
+  let text = term.getSelection();
+  let origin: "selection" | "output" = "selection";
+  if (!text.trim()) {
+    selectLastOutput();
+    text = term.getSelection();
+    origin = "output";
+  }
+  if (text.trim()) useMathStore.getState().setSource(text, origin);
 }

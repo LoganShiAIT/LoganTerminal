@@ -1,4 +1,4 @@
-/** Mirrors the serde shapes in src-tauri/src/git.rs (Phase 12). */
+/** Mirrors the serde shapes in src-tauri/src/git/ (Phase 12). */
 
 export interface GitDirty {
   added: number;
