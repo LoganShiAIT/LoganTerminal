@@ -116,10 +116,10 @@ export default function FileTree() {
   const atRoot = !cwd || parentOf(cwd) === cwd;
 
   return (
-    <div className="text-sm flex flex-col h-full">
+    <div className="text-[18px] flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
         <div className="flex items-center justify-between">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-accent font-semibold">
+          <div className="text-[14px] uppercase tracking-[0.18em] text-accent font-semibold">
             {t("Files")}
           </div>
           <div className="flex items-center gap-0.5 -mr-1">
@@ -159,7 +159,7 @@ export default function FileTree() {
           </div>
         </div>
         <div
-          className="font-mono text-[11px] text-muted mt-1 truncate cursor-pointer hover:text-accent transition-colors"
+          className="font-mono text-[15px] text-muted mt-1 truncate cursor-pointer hover:text-accent transition-colors"
           title={cwd ? t("{path} — click to insert", { path: cwd }) : undefined}
           onClick={() => insertPath(cwd)}
         >
@@ -169,14 +169,14 @@ export default function FileTree() {
       <ul className="flex-1 overflow-y-auto py-1.5">
         {!atRoot && (
           <li
-            className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer font-mono text-xs text-faint hover:bg-accent/[0.07] hover:text-muted transition-colors duration-100"
+            className="mx-1.5 px-2 h-[26px] rounded-md flex items-center gap-2 cursor-pointer font-mono text-[16px] text-faint hover:bg-accent/[0.07] hover:text-muted transition-colors duration-100"
             onClick={() => setCwd(parentOf(cwd))}
           >
             ../
           </li>
         )}
         {error && (
-          <li className="mx-1.5 px-2 py-2 text-red-400/90 text-xs break-all">
+          <li className="mx-1.5 px-2 py-2 text-red-400/90 text-[16px] break-all">
             {error}
           </li>
         )}

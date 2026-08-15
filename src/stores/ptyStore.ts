@@ -54,9 +54,14 @@ interface PtyStore {
   /**
    * Split the focused pane. `cwd` overrides where the new pane starts —
    * the file tree uses it to open a split directly in a browsed folder
-   * instead of inheriting the source pane's directory.
+   * instead of inheriting the source pane's directory. `initialCmd` is the
+   * same one-shot startup command `addTab` takes (agent launchers use it).
    */
-  splitPane: (dir: "row" | "col", cwd?: string | null) => void;
+  splitPane: (
+    dir: "row" | "col",
+    cwd?: string | null,
+    initialCmd?: string | null,
+  ) => void;
   /** Close the active pane; closing the last pane closes the tab. */
   closeActivePane: () => void;
   setActivePane: (tabId: string, paneId: string) => void;
@@ -211,12 +216,15 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       get().setActiveTab(tabs[index].id);
     },
 
-    splitPane: (dir, cwd) => {
+    splitPane: (dir, cwd, initialCmd = null) => {
       const tab = activeTab();
       if (!tab) return;
       if (collectLeaves(tab.root).length >= MAX_PANES_PER_TAB) return;
       const source = activeLeafOf(tab);
-      const newLeaf = makeLeaf(cwd ?? source.cwd ?? source.initialCwd);
+      const newLeaf = makeLeaf(
+        cwd ?? source.cwd ?? source.initialCwd,
+        initialCmd?.trim() || null,
+      );
       const root = splitLeafIn(tab.root, source.id, dir, newLeaf);
       if (root === tab.root) return;
       updateTab(tab.id, (t) => ({

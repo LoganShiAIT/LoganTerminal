@@ -11,9 +11,20 @@ use crate::pty::PtyManager;
 const POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
 /// Binary names we recognize as coding agents. Kept lowercase.
+///
+/// Everything the launcher menu can start (see `src/lib/agentLaunchers.ts`)
+/// belongs here too, or a one-click launch would run an agent the badge, the
+/// dashboard and the idle timer all treat as a plain shell. Names to watch:
+/// `agy` is Antigravity's actual binary (there is no `antigravity` one), and
+/// ZCode's runtime runs through its Electron shell, so the process shows up as
+/// `ZCode` — matched case-insensitively below.
 const AGENT_NAMES: &[&str] = &[
     "claude",
     "codex",
+    "zcode",
+    "antigravity",
+    "agy",
+    "dsh",
     "aider",
     "amp",
     "cline",

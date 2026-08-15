@@ -6,6 +6,7 @@ import { useT } from "../../i18n";
 import TabBar from "../TabBar/TabBar";
 import { GearIcon, SidebarIcon } from "../icons";
 import StatusCluster from "./StatusCluster";
+import AgentLaunchMenu from "./AgentLaunchMenu";
 
 const HEADER_BUTTON =
   "w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors";
@@ -17,6 +18,10 @@ const HEADER_BUTTON =
  * surface. Tauri's drag script exempts clickable elements (buttons) by
  * itself, but custom pointer-driven widgets — the tab pills — must opt out
  * with `data-tauri-drag-region="false"`.
+ *
+ * The explicit `z-30` is what lets the launcher popover hang below the header
+ * and still paint over `<main>`: both are positioned with `z-auto` otherwise,
+ * and the later sibling would win.
  */
 export default function AppHeader() {
   const t = useT();
@@ -35,7 +40,7 @@ export default function AppHeader() {
   return (
     <header
       data-tauri-drag-region="deep"
-      className={`relative h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
+      className={`relative z-30 h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
         isMac ? "pl-20" : "pl-2"
       }`}
     >
@@ -48,6 +53,7 @@ export default function AppHeader() {
       </button>
       <TabBar />
       <StatusCluster />
+      <AgentLaunchMenu />
       <button
         className={toggleClass(rightSidebarOpen)}
         onClick={toggleRightSidebar}

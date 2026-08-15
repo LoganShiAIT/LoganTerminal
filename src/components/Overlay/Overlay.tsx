@@ -79,10 +79,10 @@ export function OverlayHeader({
   }
   return (
     <div className="flex h-11 items-center gap-2.5 border-b border-edge px-4">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+      <span className="text-[15px] font-semibold uppercase tracking-[0.18em] text-muted">
         {title}
       </span>
-      {note && <span className="font-mono text-[10px] text-faint">{note}</span>}
+      {note && <span className="font-mono text-[14px] text-faint">{note}</span>}
       <span className="ml-auto kbd shrink-0">esc</span>
     </div>
   );
@@ -128,7 +128,7 @@ export function OverlayRow({
       ref={selected ? rowRef : undefined}
       title={title}
       className={`group relative mx-1.5 flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 transition-colors duration-75 ${
-        compact ? "text-[12px]" : "text-[13px]"
+        compact ? "text-[16px]" : "text-[17px]"
       } ${
         selected
           ? "bg-accent/[0.13] text-ink"
@@ -148,7 +148,7 @@ export function OverlayRow({
 /** Bottom hint bar. Pass `<OverlayHint>` children plus anything `ml-auto`. */
 export function OverlayFooter({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-8 items-center gap-3 border-t border-edge px-4 text-[10px] text-faint">
+    <div className="flex h-8 items-center gap-3 border-t border-edge px-4 text-[14px] text-faint">
       {children}
     </div>
   );
@@ -173,7 +173,7 @@ export function OverlayEmpty({
 }) {
   return (
     <div
-      className={`px-4 py-6 text-center text-xs ${
+      className={`px-4 py-6 text-center text-[16px] ${
         tone === "error" ? "break-all text-red-400/90" : "text-faint"
       }`}
     >

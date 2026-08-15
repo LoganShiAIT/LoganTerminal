@@ -87,13 +87,13 @@ export default function CommandPalette() {
   return (
     <Overlay width={580} onClose={close}>
       <OverlayHeader title="">
-        <span className="font-mono text-accent text-sm shrink-0">❯</span>
+        <span className="font-mono text-accent text-[18px] shrink-0">❯</span>
         <input
           ref={inputRef}
           type="text"
           spellCheck={false}
           placeholder={t("Type a command… themes, tabs, effects, anything")}
-          className="flex-1 bg-transparent font-mono text-[13px] text-ink placeholder:text-faint focus:outline-none"
+          className="flex-1 bg-transparent font-mono text-[17px] text-ink placeholder:text-faint focus:outline-none"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {

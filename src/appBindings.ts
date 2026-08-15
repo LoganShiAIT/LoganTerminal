@@ -2,6 +2,7 @@ import { usePtyStore, getActiveLeaf } from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
 import { sendTermCmd } from "./lib/termBus";
+import { launchPrimaryAgent } from "./lib/launchAgent";
 import { isMac } from "./lib/keys";
 import type { Binding } from "./lib/keymap";
 
@@ -157,6 +158,14 @@ export const APP_BINDINGS: Binding[] = [
       const s = ui();
       s.setWorktreeModalOpen(!s.worktreeModalOpen);
     },
+  },
+  {
+    // One key for "start my usual agent" — the first enabled launcher, in a
+    // new tab at the focused pane's directory. The rest live behind the ⚡
+    // menu and the palette.
+    key: "l",
+    shift: true,
+    run: () => launchPrimaryAgent("tab"),
   },
   { key: "g", shift: true, run: () => ui().toggleRightPanel("diff") },
   {

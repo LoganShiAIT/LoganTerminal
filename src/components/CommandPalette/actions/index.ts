@@ -3,6 +3,7 @@ import { usePtyStore } from "../../../stores/ptyStore";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { useUiStore } from "../../../stores/uiStore";
 import { usePromptStore } from "../../../stores/promptStore";
+import { useAgentLauncherStore } from "../../../stores/agentLauncherStore";
 import type { PaletteAction } from "./types";
 import { agentActions } from "./agents";
 import { tabActions, paneActions } from "./workspace";
@@ -27,11 +28,19 @@ export function useActions(): PaletteAction[] {
   const activeTabId = usePtyStore((s) => s.activeTabId);
   const rightPanelTab = useUiStore((s) => s.rightPanelTab);
   const prompts = usePromptStore((s) => s.prompts);
+  const launchers = useAgentLauncherStore((s) => s.launchers);
+  const bypass = useAgentLauncherStore((s) => s.bypassPermissions);
   const settings = useSettingsStore();
 
   return useMemo(
     () => [
-      ...agentActions(tabs, activeTabId, settings.fleetCommand),
+      ...agentActions(
+        tabs,
+        activeTabId,
+        settings.fleetCommand,
+        launchers,
+        bypass,
+      ),
       ...tabActions(tabs, activeTabId),
       ...paneActions(tabs, activeTabId),
       ...terminalActions(settings),
@@ -39,6 +48,6 @@ export function useActions(): PaletteAction[] {
       ...promptActions(prompts),
       ...appearanceActions(settings),
     ],
-    [tabs, activeTabId, rightPanelTab, prompts, settings],
+    [tabs, activeTabId, rightPanelTab, prompts, launchers, bypass, settings],
   );
 }

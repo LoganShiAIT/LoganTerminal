@@ -175,6 +175,18 @@ describe("split panes", () => {
     expect(newLeaf.initialCwd).toBe("/init");
   });
 
+  it("carries a startup command onto the new pane (agent launchers)", async () => {
+    const m = await fresh();
+    const st = () => m.usePtyStore.getState();
+    st().splitPane("row", null, "  claude --dangerously-skip-permissions  ");
+    const tab = () => st().tabs[0];
+    const newLeaf = m.findLeaf(tab().root, tab().activePaneId)!;
+    expect(newLeaf.initialCmd).toBe("claude --dangerously-skip-permissions");
+    // The default split (no command) must stay a plain shell.
+    st().splitPane("col");
+    expect(m.findLeaf(tab().root, tab().activePaneId)!.initialCmd).toBeNull();
+  });
+
   it("caps a tab at MAX_PANES_PER_TAB leaves", async () => {
     const m = await fresh();
     const st = () => m.usePtyStore.getState();

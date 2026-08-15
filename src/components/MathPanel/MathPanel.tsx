@@ -34,10 +34,10 @@ export default function MathPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col text-sm">
+    <div className="flex h-full flex-col text-[18px]">
       <div className="shrink-0 border-b border-edge px-3 pb-2 pt-3">
         <div className="flex items-center justify-between">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">
+          <div className="text-[14px] font-semibold uppercase tracking-[0.18em] text-accent">
             {t("Math")}
           </div>
           <div className="-mr-1 flex items-center gap-0.5">
@@ -61,7 +61,7 @@ export default function MathPanel() {
             />
           </div>
         </div>
-        <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-faint">
+        <div className="mt-1 flex items-center gap-2 font-mono text-[14px] text-faint">
           <span className="truncate">
             {!source
               ? autoFollow
@@ -107,7 +107,7 @@ export default function MathPanel() {
         {source.trim() ? (
           <MarkdownPreview source={source} />
         ) : (
-          <div className="space-y-3 text-xs text-faint">
+          <div className="space-y-3 text-[16px] text-faint">
             <p>
               {t(
                 "Formulas printed in the terminal land here on their own; hover the underline in the output for a quick look. Or select any text and press {key} — or just type below.",
@@ -115,7 +115,7 @@ export default function MathPanel() {
               )}
             </p>
             <button
-              className="rounded-md border border-accent/35 px-2 py-1 text-[11px] text-accent transition-colors hover:bg-accent/10"
+              className="rounded-md border border-accent/35 px-2 py-1 text-[15px] text-accent transition-colors hover:bg-accent/10"
               onClick={() => setSource(SAMPLE, "manual")}
             >
               {t("Load an example")}
@@ -138,7 +138,7 @@ function HeaderButton({
 }) {
   return (
     <button
-      className="rounded-md px-1.5 py-1 text-[10px] text-faint transition-colors hover:bg-ink/5 hover:text-accent"
+      className="rounded-md px-1.5 py-1 text-[14px] text-faint transition-colors hover:bg-ink/5 hover:text-accent"
       title={title}
       onClick={onClick}
     >

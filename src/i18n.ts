@@ -274,6 +274,9 @@ const ZH: Record<string, string> = {
   "Agent overview — every pane, state, branch": "Agent 总览 —— 每个分屏的状态与分支",
   "Worktrees — new agent worktree / manage": "Worktree —— 新建 agent worktree / 管理",
   "Start/reset idle timer": "开始/重置空闲计时",
+  "Launch {name} — new tab · {cmd}": "启动 {name} —— 新标签页 · {cmd}",
+  "Launch {name} — split pane · {cmd}": "启动 {name} —— 分屏 · {cmd}",
+  "Launch agents with permission prompts bypassed": "启动 agent 时跳过权限确认",
   "New fleet tab — {panes}, {cmd}": "新建 fleet 标签页 —— {panes}，{cmd}",
   "2 panes": "2 分屏",
   "2×2 grid": "2×2 宫格",
@@ -387,6 +390,37 @@ const ZH: Record<string, string> = {
   "Add prompt": "添加提示词",
   "Show hidden files (dotfiles) in the file tree": "在文件树里显示隐藏文件（点文件）",
   "Also affects the eye button in the file tree": "与文件树里的眼睛按钮同步",
+
+  // --- agent launchers (header ⚡ menu + settings) ----------------------
+  "Launch an agent CLI ({key} for the first one)":
+    "一键启动 agent CLI（{key} 启动第一个）",
+  "Launch agent": "启动 agent",
+  "No launchers enabled — turn one on in Settings.":
+    "没有启用的启动项 —— 到设置里打开一个。",
+  "New tab running {cmd}": "新标签页运行 {cmd}",
+  "Split the current pane instead": "改为在当前分屏旁边打开",
+  "Adds each CLI's skip-permissions flag. Off launches them with their normal approval prompts.":
+    "给每个 CLI 加上跳过权限的参数。关掉则按各自默认的确认流程启动。",
+  "bypass permissions": "跳过权限确认",
+  "Edit…": "编辑…",
+  "launch agent": "启动 agent",
+  "Agent launchers": "Agent 启动项",
+  "Launch with permission prompts bypassed": "启动时跳过权限确认",
+  "Appends each CLI's skip-permissions flag. The agent can then edit and run anything in the directory it starts in.":
+    "给每个 CLI 追加跳过权限的参数。这样 agent 可以在启动目录里任意改文件、跑命令。",
+  "Hide from menus": "从菜单里隐藏",
+  "Show in menus": "在菜单里显示",
+  "(no command)": "（没有命令）",
+  "Delete launcher": "删除启动项",
+  command: "命令",
+  "bypass flags": "跳过权限的参数",
+  "bypass env (KEY=value)": "跳过权限的环境变量（KEY=value）",
+  Name: "名称",
+  "Add launcher": "添加启动项",
+  "Reset to defaults": "恢复默认",
+  "Drops custom launchers and every edit.": "会丢掉自定义启动项和所有改动。",
+  "Launch from the ⚡ button in the header, the palette, or {key} for the first one. Each opens a new tab in the focused pane's directory.":
+    "从顶栏的 ⚡ 按钮、命令面板启动，或用 {key} 启动第一个。都会在当前分屏的目录里新开标签页。",
 };
 
 function interpolate(text: string, vars?: Record<string, string | number>) {

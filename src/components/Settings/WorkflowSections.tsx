@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { usePromptStore } from "../../stores/promptStore";
+import { useAgentLauncherStore } from "../../stores/agentLauncherStore";
+import { launchLine } from "../../lib/agentLaunchers";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
 import { Section, ToggleRow, Hint, FIELD } from "./controls";
@@ -82,6 +84,162 @@ export function FilesSection() {
   );
 }
 
+/**
+ * The one-click launcher list behind the header's ⚡ menu, ⌘⇧L and the
+ * palette. Command and flags are separate fields so the bypass switch can drop
+ * the flags without anyone having to retype the command.
+ */
+export function AgentLaunchersSection() {
+  const t = useT();
+  const launchers = useAgentLauncherStore((s) => s.launchers);
+  const bypass = useAgentLauncherStore((s) => s.bypassPermissions);
+  const toggleBypass = useAgentLauncherStore((s) => s.toggleBypass);
+  const toggleLauncher = useAgentLauncherStore((s) => s.toggleLauncher);
+  const updateLauncher = useAgentLauncherStore((s) => s.updateLauncher);
+  const addLauncher = useAgentLauncherStore((s) => s.addLauncher);
+  const removeLauncher = useAgentLauncherStore((s) => s.removeLauncher);
+  const resetLaunchers = useAgentLauncherStore((s) => s.resetLaunchers);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const cmdRef = useRef<HTMLInputElement>(null);
+
+  const add = () => {
+    const name = nameRef.current?.value ?? "";
+    const command = cmdRef.current?.value ?? "";
+    if (!name.trim() || !command.trim()) return;
+    addLauncher(name, command);
+    if (nameRef.current) nameRef.current.value = "";
+    if (cmdRef.current) cmdRef.current.value = "";
+    nameRef.current?.focus();
+  };
+
+  return (
+    <Section label={t("Agent launchers")}>
+      <div className="space-y-2.5">
+        <ToggleRow
+          checked={bypass}
+          onToggle={toggleBypass}
+          label={t("Launch with permission prompts bypassed")}
+          title={t(
+            "Appends each CLI's skip-permissions flag. The agent can then edit and run anything in the directory it starts in.",
+          )}
+        />
+
+        {launchers.map((l) => (
+          <div
+            key={l.id}
+            className="rounded-lg border border-edge bg-ink/[0.03] px-2.5 py-2 space-y-1.5"
+          >
+            <div className="flex items-center gap-2">
+              <button
+                className={`w-3.5 h-3.5 shrink-0 rounded border transition-colors ${
+                  l.enabled
+                    ? "border-accent bg-accent"
+                    : "border-edge hover:border-accent/50"
+                }`}
+                onClick={() => toggleLauncher(l.id)}
+                title={l.enabled ? t("Hide from menus") : t("Show in menus")}
+              />
+              <span
+                className={`text-[16px] ${l.enabled ? "text-ink" : "text-faint line-through"}`}
+              >
+                {l.name}
+              </span>
+              <span className="ml-auto truncate font-mono text-[14px] text-faint">
+                {launchLine(l, bypass) || t("(no command)")}
+              </span>
+              {!l.builtin && (
+                <button
+                  className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[16px] leading-none text-muted hover:bg-accent hover:text-white transition-colors"
+                  onClick={() => removeLauncher(l.id)}
+                  title={t("Delete launcher")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <input
+              key={`cmd:${l.command}`}
+              defaultValue={l.command}
+              placeholder={t("command")}
+              spellCheck={false}
+              className={FIELD}
+              onBlur={(e) => updateLauncher(l.id, { command: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+            {/* Both only apply while the bypass switch above is on. Two fields
+                because CLIs disagree about where the setting lives: a flag
+                after the command, or an environment assignment before it. */}
+            <div className="flex gap-1.5">
+              <input
+                key={`args:${l.bypassArgs}`}
+                defaultValue={l.bypassArgs}
+                placeholder={t("bypass flags")}
+                spellCheck={false}
+                className={FIELD}
+                onBlur={(e) =>
+                  updateLauncher(l.id, { bypassArgs: e.target.value })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+              />
+              <input
+                key={`env:${l.bypassEnv}`}
+                defaultValue={l.bypassEnv}
+                placeholder={t("bypass env (KEY=value)")}
+                spellCheck={false}
+                className={FIELD}
+                onBlur={(e) =>
+                  updateLauncher(l.id, { bypassEnv: e.target.value })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+              />
+            </div>
+          </div>
+        ))}
+
+        <div className="flex gap-1.5">
+          <input ref={nameRef} placeholder={t("Name")} className={FIELD} />
+          <input
+            ref={cmdRef}
+            placeholder={t("command")}
+            spellCheck={false}
+            className={FIELD}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            onClick={add}
+          >
+            {t("Add launcher")}
+          </button>
+          <button
+            className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            onClick={resetLaunchers}
+            title={t("Drops custom launchers and every edit.")}
+          >
+            {t("Reset to defaults")}
+          </button>
+        </div>
+        <Hint>
+          {t(
+            "Launch from the ⚡ button in the header, the palette, or {key} for the first one. Each opens a new tab in the focused pane's directory.",
+            { key: kbd("⌘⇧L") },
+          )}
+        </Hint>
+      </div>
+    </Section>
+  );
+}
+
 export function AgentsSection() {
   const t = useT();
   const fleetCommand = useSettingsStore((s) => s.fleetCommand);
@@ -90,7 +248,7 @@ export function AgentsSection() {
   return (
     <Section label={t("Agents")}>
       <div className="space-y-1.5">
-        <div className="text-[11px] text-muted">{t("Fleet command")}</div>
+        <div className="text-[15px] text-muted">{t("Fleet command")}</div>
         <input
           key={fleetCommand /* re-seed after external changes */}
           defaultValue={fleetCommand}
@@ -135,7 +293,7 @@ export function PromptsSection() {
     <Section label={t("Prompts")}>
       <div className="space-y-2">
         {prompts.length === 0 && (
-          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[11px] leading-relaxed text-faint">
+          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[15px] leading-relaxed text-faint">
             {t(
               "Save prompts you feed your agents often — insert them from the command palette ({key}) into the focused terminal.",
               { key: kbd("⌘P") },
@@ -148,13 +306,13 @@ export function PromptsSection() {
             className="group flex items-start gap-2 rounded-lg border border-edge bg-ink/[0.03] px-2.5 py-2"
           >
             <div className="min-w-0 flex-1">
-              <div className="text-xs text-ink truncate">{p.title}</div>
-              <div className="font-mono text-[10px] text-faint whitespace-pre-wrap break-all line-clamp-2">
+              <div className="text-[16px] text-ink truncate">{p.title}</div>
+              <div className="font-mono text-[14px] text-faint whitespace-pre-wrap break-all line-clamp-2">
                 {p.text}
               </div>
             </div>
             <button
-              className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[12px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
+              className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[16px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
               onClick={() => removePrompt(p.id)}
               title={t("Delete prompt")}
             >
@@ -172,7 +330,7 @@ export function PromptsSection() {
           className={`${FIELD} resize-y`}
         />
         <button
-          className="h-7 px-3 rounded-md border border-edge text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+          className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
           onClick={add}
         >
           {t("Add prompt")}

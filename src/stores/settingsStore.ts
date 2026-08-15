@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { applyTheme, getTheme } from "../themes";
 
 export const MIN_FONT_SIZE = 9;
-export const MAX_FONT_SIZE = 28;
-export const DEFAULT_FONT_SIZE = 13;
+export const MAX_FONT_SIZE = 32;
+export const DEFAULT_FONT_SIZE = 17;
 
 export type CursorStyle = "block" | "bar" | "underline";
 export type Locale = "zh" | "en";

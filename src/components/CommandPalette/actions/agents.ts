@@ -3,6 +3,13 @@ import {
   attentionPanes,
   type PtyTab,
 } from "../../../stores/ptyStore";
+import {
+  enabledLaunchers,
+  launchLine,
+  type AgentLauncher,
+} from "../../../lib/agentLaunchers";
+import { launchAgent } from "../../../lib/launchAgent";
+import { useAgentLauncherStore } from "../../../stores/agentLauncherStore";
 import { dirLabel } from "../../../lib/paths";
 import { kbd } from "../../../lib/keys";
 import { t } from "../../../i18n";
@@ -17,6 +24,8 @@ export function agentActions(
   tabs: PtyTab[],
   activeTabId: string | null,
   fleetCommand: string,
+  launchers: AgentLauncher[] = [],
+  bypass = true,
 ): PaletteAction[] {
   const group = t("Agents");
   const actions: PaletteAction[] = [];
@@ -47,6 +56,46 @@ export function agentActions(
         },
       });
     }
+  }
+
+  // One-click launchers. The resolved command line is part of the label on
+  // purpose: it is the only place the bypass flags are visible before they
+  // run, and it makes "--dangerously" a searchable term.
+  const launchable = enabledLaunchers(launchers);
+  launchable.forEach((launcher, i) => {
+    const cmd = launchLine(launcher, bypass);
+    actions.push(
+      {
+        id: `launch-${launcher.id}`,
+        group,
+        label: t("Launch {name} — new tab · {cmd}", {
+          name: launcher.name,
+          cmd,
+        }),
+        // Only the first one has a shortcut; ⌘⇧L is "start my usual agent".
+        hint: i === 0 ? kbd("⌘⇧L") : undefined,
+        run: () => launchAgent(launcher, "tab"),
+      },
+      {
+        id: `launch-${launcher.id}-split`,
+        group,
+        label: t("Launch {name} — split pane · {cmd}", {
+          name: launcher.name,
+          cmd,
+        }),
+        run: () => launchAgent(launcher, "split"),
+      },
+    );
+  });
+
+  if (launchable.length > 0) {
+    actions.push({
+      id: "agent-bypass-toggle",
+      group,
+      label: t("Launch agents with permission prompts bypassed"),
+      active: bypass,
+      run: () => useAgentLauncherStore.getState().toggleBypass(),
+    });
   }
 
   actions.push(

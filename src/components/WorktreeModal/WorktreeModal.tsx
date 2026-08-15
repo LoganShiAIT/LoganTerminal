@@ -17,7 +17,7 @@ import { Overlay, OverlayHeader, OverlayFooter } from "../Overlay/Overlay";
 import { BranchIcon } from "../icons";
 
 const FIELD =
-  "w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[12px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50";
+  "w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[16px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50";
 
 /**
  * Worktree flows (⌘⇧N): task name → sibling worktree + branch → agent tab
@@ -148,7 +148,7 @@ export default function WorktreeModal() {
 
       <div className="p-4 space-y-3">
         {repoError ? (
-          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[11px] leading-relaxed text-faint">
+          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[15px] leading-relaxed text-faint">
             {repoError}
           </div>
         ) : (
@@ -167,7 +167,7 @@ export default function WorktreeModal() {
               spellCheck={false}
               className={FIELD}
             />
-            <div className="flex items-center gap-2 font-mono text-[10px] text-faint min-h-4">
+            <div className="flex items-center gap-2 font-mono text-[14px] text-faint min-h-4">
               {branch ? (
                 <>
                   <span className="flex items-center gap-1 text-muted">
@@ -192,7 +192,7 @@ export default function WorktreeModal() {
             </div>
             <div className="flex items-center gap-3">
               {cmd && (
-                <label className="flex items-center gap-1.5 text-[11px] text-muted cursor-pointer select-none">
+                <label className="flex items-center gap-1.5 text-[15px] text-muted cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={runAgent}
@@ -205,7 +205,7 @@ export default function WorktreeModal() {
                 </label>
               )}
               <button
-                className={`ml-auto h-7 px-3 rounded-md border text-[11px] transition-colors ${
+                className={`ml-auto h-7 px-3 rounded-md border text-[15px] transition-colors ${
                   canCreate
                     ? "border-accent/50 text-accent hover:bg-accent hover:text-white"
                     : "border-edge text-faint cursor-default"
@@ -229,17 +229,17 @@ export default function WorktreeModal() {
                 key={e.path}
                 className="group flex items-center gap-2 rounded-lg border border-edge bg-ink/[0.03] px-2.5 py-1.5"
               >
-                <span className="flex items-center gap-1.5 font-mono text-[11px] text-ink shrink-0">
+                <span className="flex items-center gap-1.5 font-mono text-[15px] text-ink shrink-0">
                   <BranchIcon />
                   {e.branch ?? "(detached)"}
                 </span>
                 {e.is_main && (
-                  <span className="px-1.5 rounded-full border border-edge text-[9px] uppercase tracking-[0.12em] text-faint">
+                  <span className="px-1.5 rounded-full border border-edge text-[13px] uppercase tracking-[0.12em] text-faint">
                     main
                   </span>
                 )}
                 <span
-                  className="truncate font-mono text-[10px] text-faint"
+                  className="truncate font-mono text-[14px] text-faint"
                   title={e.path}
                 >
                   {e.path}
@@ -300,7 +300,7 @@ function Banner({
 }) {
   return (
     <div
-      className={`px-3 py-2 rounded-lg border font-mono text-[10px] leading-relaxed whitespace-pre-wrap break-all ${
+      className={`px-3 py-2 rounded-lg border font-mono text-[14px] leading-relaxed whitespace-pre-wrap break-all ${
         tone === "error"
           ? "border-red-400/40 bg-red-500/10 text-red-300"
           : "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
@@ -330,7 +330,7 @@ function EntryButton({
         : "hover:border-accent/40 hover:text-accent";
   return (
     <button
-      className={`h-6 px-2 rounded-md border border-edge text-[10px] text-muted transition-colors ${hover}`}
+      className={`h-6 px-2 rounded-md border border-edge text-[14px] text-muted transition-colors ${hover}`}
       onClick={onClick}
       title={title}
     >

@@ -14,6 +14,7 @@ import {
 import {
   NotificationsSection,
   MathSection,
+  AgentLaunchersSection,
   AgentsSection,
   PromptsSection,
   FilesSection,
@@ -38,11 +39,11 @@ export default function SettingsPanel() {
   return (
     <Overlay width={460} align="center" onClose={() => setOpen(false)}>
       <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-edge sticky top-0 bg-raise z-10">
-        <div className="text-[11px] uppercase tracking-[0.22em] text-accent font-semibold">
+        <div className="text-[15px] uppercase tracking-[0.22em] text-accent font-semibold">
           {t("Settings")}
         </div>
         <button
-          className="w-6 h-6 grid place-items-center rounded-md text-[14px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
+          className="w-6 h-6 grid place-items-center rounded-md text-[18px] leading-none text-muted hover:text-ink hover:bg-ink/10 transition-colors"
           onClick={() => setOpen(false)}
           title={t("Close (esc)")}
         >
@@ -59,12 +60,13 @@ export default function SettingsPanel() {
         <EffectsSection />
         <NotificationsSection />
         <MathSection />
+        <AgentLaunchersSection />
         <AgentsSection />
         <PromptsSection />
         <FilesSection />
       </div>
 
-      <div className="px-5 pb-4 text-[10px] text-faint">
+      <div className="px-5 pb-4 text-[14px] text-faint">
         {t(
           "Changes apply instantly and are remembered across restarts. Tip: everything here is also in the command palette ({key}).",
           { key: kbd("⌘P") },

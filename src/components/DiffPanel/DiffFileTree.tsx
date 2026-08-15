@@ -47,13 +47,13 @@ function Patch({ text }: { text: string }) {
   const t = useT();
   if (!text.trim()) {
     return (
-      <div className="px-3 py-2 text-[10px] text-faint">
+      <div className="px-3 py-2 text-[14px] text-faint">
         {t("No textual changes (empty or binary file).")}
       </div>
     );
   }
   return (
-    <pre className="overflow-x-auto px-1 py-1 font-mono text-[10px] leading-[1.5]">
+    <pre className="overflow-x-auto px-1 py-1 font-mono text-[14px] leading-[1.5]">
       {text.split("\n").map((line, i) => (
         <div
           key={i}
@@ -77,10 +77,10 @@ function Stat({ additions, deletions }: { additions: number; deletions: number }
 
 function fileStat(f: DiffFile, t: ReturnType<typeof useT>) {
   if (f.untracked) {
-    return <span className="text-[9px] uppercase text-emerald-300/90">{t("new")}</span>;
+    return <span className="text-[13px] uppercase text-emerald-300/90">{t("new")}</span>;
   }
   if (f.additions === null && f.deletions === null) {
-    return <span className="text-[9px] uppercase text-faint">{t("bin")}</span>;
+    return <span className="text-[13px] uppercase text-faint">{t("bin")}</span>;
   }
   return <Stat additions={f.additions ?? 0} deletions={f.deletions ?? 0} />;
 }
@@ -210,7 +210,7 @@ export default function DiffFileTree({
   return (
     <div>
       {!compact && (
-        <div className="mb-1 flex h-5 items-center gap-2 px-1 font-mono text-[10px] text-faint">
+        <div className="mb-1 flex h-5 items-center gap-2 px-1 font-mono text-[14px] text-faint">
           <span>{t("{n} files", { n: files.length })}</span>
           <span className="flex items-center gap-1.5">
             <Stat additions={totals.additions} deletions={totals.deletions} />
@@ -244,11 +244,11 @@ export default function DiffFileTree({
                 <span className="ml-1 text-faint">
                   <Chevron open={open} />
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
+                <span className="min-w-0 flex-1 truncate font-mono text-[15px] text-muted">
                   {dir.label}
                 </span>
-                <span className="shrink-0 font-mono text-[9px] text-faint">{dir.files}</span>
-                <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] opacity-70">
+                <span className="shrink-0 font-mono text-[13px] text-faint">{dir.files}</span>
+                <span className="flex shrink-0 items-center gap-1 font-mono text-[14px] opacity-70">
                   <Stat additions={dir.additions} deletions={dir.deletions} />
                 </span>
               </button>
@@ -276,7 +276,7 @@ export default function DiffFileTree({
                   aria-hidden
                 />
                 <span
-                  className={`min-w-0 flex-1 truncate font-mono text-[11px] ${
+                  className={`min-w-0 flex-1 truncate font-mono text-[15px] ${
                     isOpen ? "text-accent" : "text-ink"
                   }`}
                 >
@@ -294,18 +294,18 @@ export default function DiffFileTree({
                 >
                   <ToReviewIcon />
                 </button>
-                <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px]">
+                <span className="flex shrink-0 items-center gap-1.5 font-mono text-[14px]">
                   {fileStat(file, t)}
                 </span>
               </div>
               {isOpen && (
                 <div className="my-1 overflow-hidden rounded-lg border border-accent/25 bg-ink/[0.03]">
                   {patchError ? (
-                    <div className="px-3 py-2 font-mono text-[10px] break-all whitespace-pre-wrap text-red-300">
+                    <div className="px-3 py-2 font-mono text-[14px] break-all whitespace-pre-wrap text-red-300">
                       {patchError}
                     </div>
                   ) : patch === null ? (
-                    <div className="px-3 py-2 text-[10px] text-faint">{t("Loading…")}</div>
+                    <div className="px-3 py-2 text-[14px] text-faint">{t("Loading…")}</div>
                   ) : (
                     <Patch text={patch} />
                   )}
