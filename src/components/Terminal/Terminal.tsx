@@ -24,6 +24,9 @@ import "@xterm/xterm/css/xterm.css";
 /** Agent TUIs can bell repeatedly; at most one toast per pane per window. */
 const BELL_THROTTLE_MS = 30_000;
 
+/** Upper bound on how often a resize gesture is allowed to refit the grid. */
+const FIT_THROTTLE_MS = 60;
+
 interface TerminalProps {
   tabId: string;
   paneId: string;
@@ -134,7 +137,21 @@ export default function Terminal({
 
     // Resizing drives the whole session: the first measurement is also what
     // spawns the shell, since a PTY needs real dimensions to start.
+    let offscreen = false;
     const onSize = () => {
+      // A pane that is off screen — a background tab, or a pane behind a
+      // zoomed sibling — is `display: none`, so it has no layout box and
+      // getComputedStyle hands FitAddon the *specified* "100%" instead of a
+      // used pixel value. FitAddon parses that as 100px and proposes a ~9x5
+      // grid: the buffer reflows to nine columns and the pty gets SIGWINCH'd
+      // down with it, so whatever TUI is running redraws into a sliver. What
+      // you see on the way back is that reflow plus a canvas whose backing
+      // store is a frame out of sync with its CSS size — text stretched and
+      // blown up. Never measure a pane that isn't rendered.
+      if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+        offscreen = true;
+        return;
+      }
       try {
         fit.fit();
       } catch {
@@ -142,9 +159,49 @@ export default function Terminal({
       }
       if (term.cols < 2 || term.rows < 2) return;
       session.sync(term.rows, term.cols);
+      if (offscreen) {
+        offscreen = false;
+        // xterm pauses its renderer while the pane is hidden; repaint at the
+        // size we just measured instead of waiting for the next write.
+        term.refresh(0, term.rows - 1);
+      }
     };
-    const ro = new ResizeObserver(onSize);
+
+    // Split, close and zoom animate the pane rect for 150ms, and a divider
+    // drag fires every frame. Fitting on each of those intermediate widths
+    // reflows the buffer and resizes the pty a dozen times for one gesture,
+    // which is what leaves a redrawing agent TUI garbled. Fit on the leading
+    // frame so dragging still tracks the pointer, then once more after the
+    // motion settles.
+    let lastFitAt = 0;
+    let trailing: number | null = null;
+    const requestFit = () => {
+      const wait = FIT_THROTTLE_MS - (Date.now() - lastFitAt);
+      if (wait <= 0) {
+        lastFitAt = Date.now();
+        onSize();
+        return;
+      }
+      if (trailing !== null) return;
+      trailing = window.setTimeout(() => {
+        trailing = null;
+        lastFitAt = Date.now();
+        onSize();
+      }, wait);
+    };
+    const ro = new ResizeObserver(requestFit);
     ro.observe(container);
+
+    // Coming back from `display: none` is not always a size change the
+    // ResizeObserver reports, and a font-size change that arrived while the
+    // pane was hidden still has to land. Visibility is the reliable edge.
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[entries.length - 1].isIntersecting) onSize();
+      },
+      { threshold: 0 },
+    );
+    io.observe(container);
 
     const unsubSettings = useSettingsStore.subscribe((s, prev) => {
       if (term.options.fontSize !== s.fontSize) {
@@ -230,6 +287,8 @@ export default function Terminal({
 
     return () => {
       ro.disconnect();
+      io.disconnect();
+      if (trailing !== null) window.clearTimeout(trailing);
       unsubSettings();
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
