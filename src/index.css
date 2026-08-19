@@ -261,8 +261,8 @@ body {
   }
 }
 
-/* Right-sidebar tab swap. The incoming panel eases in from the side you moved
-   toward — `--panel-from` is set inline by RightPanel from the tab order, so
+/* Sidebar tab swap. The incoming panel eases in from the side you moved
+   toward — `--panel-from` is set inline by SidePanel from the tab order, so
    going left and going right don't look identical. Deliberately slower than
    the app's other transitions: this is a whole surface changing, not a hover
    state, and it reads as a swap rather than a flicker. */

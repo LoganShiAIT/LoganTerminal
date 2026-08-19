@@ -319,7 +319,7 @@ export function installMathAwareness(
         hit.display ? `$$${hit.value}$$` : `$${hit.value}$`,
         "selection",
       );
-    useUiStore.getState().openRightPanel("math");
+    useUiStore.getState().openSidebarPanel("math");
   };
 
   const root = term.element;

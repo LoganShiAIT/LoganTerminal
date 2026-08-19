@@ -167,7 +167,7 @@ export const APP_BINDINGS: Binding[] = [
     shift: true,
     run: () => launchPrimaryAgent("tab"),
   },
-  { key: "g", shift: true, run: () => ui().toggleRightPanel("diff") },
+  { key: "g", shift: true, run: () => ui().toggleSidebarPanel("diff") },
   {
     // Math preview: pull the terminal selection (or the last command's
     // output) into the panel on the way in.
@@ -175,12 +175,14 @@ export const APP_BINDINGS: Binding[] = [
     shift: true,
     run: () => {
       const s = ui();
-      if (!(s.rightSidebarOpen && s.rightPanelTab === "math")) {
+      if (!(s.sidebarOpen && s.sidebarTab === "math")) {
         sendTermCmd("send-selection");
       }
-      s.toggleRightPanel("math");
+      s.toggleSidebarPanel("math");
     },
   },
-  { key: "b", shift: false, run: () => ui().toggleLeftSidebar() },
-  { key: "j", shift: false, run: () => ui().toggleRightSidebar() },
+  // ⌘B is the panel itself; ⌘J is "show me the files", the same shape as
+  // ⌘⇧G for the diff — press it again on the file tab and the panel closes.
+  { key: "b", shift: false, run: () => ui().toggleSidebar() },
+  { key: "j", shift: false, run: () => ui().toggleSidebarPanel("files") },
 ];

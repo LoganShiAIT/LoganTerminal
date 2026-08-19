@@ -100,7 +100,7 @@ function BranchChip({ pane }: { pane: LeafPane }) {
   return (
     <button
       className={`${CHIP} text-muted bg-ink/5 border-edge max-w-[200px] hover:text-accent hover:border-accent/35 transition-colors`}
-      onClick={() => useUiStore.getState().openRightPanel("diff")}
+      onClick={() => useUiStore.getState().openSidebarPanel("diff")}
       title={
         t("Git branch of {where}", { where }) +
         summary +

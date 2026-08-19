@@ -12,7 +12,7 @@ const HEADER_BUTTON =
   "w-7 h-7 shrink-0 grid place-items-center rounded-lg transition-colors";
 
 /**
- * The window's title bar: sidebar toggles, tabs, live status, settings.
+ * The window's title bar: the sidebar toggle, tabs, live status, settings.
  *
  * `data-tauri-drag-region="deep"` makes the whole strip a window-drag
  * surface. Tauri's drag script exempts clickable elements (buttons) by
@@ -25,10 +25,8 @@ const HEADER_BUTTON =
  */
 export default function AppHeader() {
   const t = useT();
-  const leftSidebarOpen = useUiStore((s) => s.leftSidebarOpen);
-  const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
-  const toggleLeftSidebar = useUiStore((s) => s.toggleLeftSidebar);
-  const toggleRightSidebar = useUiStore((s) => s.toggleRightSidebar);
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
 
   const toggleClass = (open: boolean) =>
     `${HEADER_BUTTON} ${
@@ -45,22 +43,15 @@ export default function AppHeader() {
       }`}
     >
       <button
-        className={toggleClass(leftSidebarOpen)}
-        onClick={toggleLeftSidebar}
-        title={t("Toggle file sidebar")}
+        className={toggleClass(sidebarOpen)}
+        onClick={toggleSidebar}
+        title={t("Toggle sidebar ({key})", { key: kbd("⌘B") })}
       >
-        <SidebarIcon side="left" />
+        <SidebarIcon />
       </button>
       <TabBar />
       <StatusCluster />
       <AgentLaunchMenu />
-      <button
-        className={toggleClass(rightSidebarOpen)}
-        onClick={toggleRightSidebar}
-        title={t("Toggle review sidebar")}
-      >
-        <SidebarIcon side="right" />
-      </button>
       <button
         className={`${HEADER_BUTTON} text-muted hover:text-accent hover:bg-accent/[0.08]`}
         onClick={() => useSettingsStore.getState().setPanelOpen(true)}

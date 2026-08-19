@@ -28,7 +28,7 @@ const LOG_LIMIT = 120;
 export default function DiffPanel() {
   const t = useT();
   const pane = useActivePane();
-  const sidebarOpen = useUiStore((s) => s.rightSidebarOpen);
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const cwd = pane?.cwd ?? pane?.initialCwd ?? null;
   const branch = pane?.gitBranch ?? null;
   const dirty = pane?.gitDirty ?? null;

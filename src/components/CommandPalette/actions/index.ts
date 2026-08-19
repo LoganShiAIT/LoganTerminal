@@ -26,7 +26,7 @@ export type { PaletteAction } from "./types";
 export function useActions(): PaletteAction[] {
   const tabs = usePtyStore((s) => s.tabs);
   const activeTabId = usePtyStore((s) => s.activeTabId);
-  const rightPanelTab = useUiStore((s) => s.rightPanelTab);
+  const sidebarTab = useUiStore((s) => s.sidebarTab);
   const prompts = usePromptStore((s) => s.prompts);
   const launchers = useAgentLauncherStore((s) => s.launchers);
   const bypass = useAgentLauncherStore((s) => s.bypassPermissions);
@@ -44,10 +44,10 @@ export function useActions(): PaletteAction[] {
       ...tabActions(tabs, activeTabId),
       ...paneActions(tabs, activeTabId),
       ...terminalActions(settings),
-      ...viewActions(rightPanelTab, settings),
+      ...viewActions(sidebarTab, settings),
       ...promptActions(prompts),
       ...appearanceActions(settings),
     ],
-    [tabs, activeTabId, rightPanelTab, prompts, launchers, bypass, settings],
+    [tabs, activeTabId, sidebarTab, prompts, launchers, bypass, settings],
   );
 }

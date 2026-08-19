@@ -12,8 +12,7 @@ export type Locale = "zh" | "en";
  */
 const ZH: Record<string, string> = {
   // --- header / status cluster ---------------------------------------
-  "Toggle file sidebar": "显示/隐藏文件侧栏",
-  "Toggle review sidebar": "显示/隐藏右侧面板",
+  "Toggle sidebar ({key})": "显示/隐藏侧栏（{key}）",
   "Resize sidebar": "拖动调整侧栏宽度",
   "Settings ({key})": "设置（{key}）",
   "Broadcast is ON — keystrokes go to every pane in this tab. Click to turn off.":
@@ -174,6 +173,7 @@ const ZH: Record<string, string> = {
   "Loading...": "加载中…",
   "Select a text file to review.": "选择一个文本文件来审阅。",
   "Remove attachment": "移除附件",
+  "{n} attached for review": "已附上 {n} 个待审阅",
   unsaved: "未保存",
   Save: "保存",
   "Drop files or folders here to review them.":
@@ -304,8 +304,8 @@ const ZH: Record<string, string> = {
   "Decrease font size": "减小字号",
   "Reset font size": "重置字号",
   "Find file or folder in this project": "在本项目里检索文件/文件夹",
-  "Toggle files sidebar": "显示/隐藏文件侧栏",
-  "Toggle assets / review sidebar": "显示/隐藏素材/审阅侧栏",
+  "Toggle sidebar": "显示/隐藏侧栏",
+  "Show file tree": "打开文件树",
   "Show assets panel": "打开素材面板",
   "Show review panel": "打开审阅面板",
   "Show git diff panel": "打开 Git 差异面板",

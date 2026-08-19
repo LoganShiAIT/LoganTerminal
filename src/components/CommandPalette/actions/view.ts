@@ -1,4 +1,4 @@
-import type { RightPanelTab } from "../../../stores/uiStore";
+import type { SidebarTab } from "../../../stores/uiStore";
 import type { PromptSnippet } from "../../../stores/promptStore";
 import { sendTermCmd } from "../../../lib/termBus";
 import { kbd } from "../../../lib/keys";
@@ -7,7 +7,7 @@ import { settings, ui, type PaletteAction } from "./types";
 
 /** Panels, sidebars and the finder — what is on screen. */
 export function viewActions(
-  rightPanelTab: RightPanelTab,
+  sidebarTab: SidebarTab,
   s: { mathInline: boolean; mathAutoFollow: boolean },
 ): PaletteAction[] {
   const view = t("View");
@@ -21,40 +21,41 @@ export function viewActions(
       run: () => ui().setFileSearchOpen(true),
     },
     {
-      id: "view-left",
+      id: "view-sidebar",
       group: view,
-      label: t("Toggle files sidebar"),
+      label: t("Toggle sidebar"),
       hint: kbd("⌘B"),
-      run: () => ui().toggleLeftSidebar(),
+      run: () => ui().toggleSidebar(),
     },
     {
-      id: "view-right",
+      id: "view-files",
       group: view,
-      label: t("Toggle assets / review sidebar"),
+      label: t("Show file tree"),
       hint: kbd("⌘J"),
-      run: () => ui().toggleRightSidebar(),
+      active: sidebarTab === "files",
+      run: () => ui().openSidebarPanel("files"),
     },
     {
       id: "view-assets",
       group: view,
       label: t("Show assets panel"),
-      active: rightPanelTab === "assets",
-      run: () => ui().openRightPanel("assets"),
+      active: sidebarTab === "assets",
+      run: () => ui().openSidebarPanel("assets"),
     },
     {
       id: "view-review",
       group: view,
       label: t("Show review panel"),
-      active: rightPanelTab === "review",
-      run: () => ui().openRightPanel("review"),
+      active: sidebarTab === "review",
+      run: () => ui().openSidebarPanel("review"),
     },
     {
       id: "view-diff",
       group: view,
       label: t("Show git diff panel"),
       hint: kbd("⌘⇧G"),
-      active: rightPanelTab === "diff",
-      run: () => ui().openRightPanel("diff"),
+      active: sidebarTab === "diff",
+      run: () => ui().openSidebarPanel("diff"),
     },
     {
       id: "view-math",
@@ -62,10 +63,10 @@ export function viewActions(
       label: t("Render selection as math / markdown"),
       hint: kbd("⌘⇧M"),
       keepFocus: true,
-      active: rightPanelTab === "math",
+      active: sidebarTab === "math",
       run: () => {
         sendTermCmd("send-selection");
-        ui().openRightPanel("math");
+        ui().openSidebarPanel("math");
       },
     },
     {

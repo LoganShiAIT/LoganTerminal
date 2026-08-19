@@ -128,15 +128,11 @@ export function GearIcon({ size = 18, className }: GlyphProps) {
 }
 
 /** Panel toggle: a framed area with the named edge highlighted. */
-export function SidebarIcon({
-  size = 19,
-  className,
-  side,
-}: GlyphProps & { side: "left" | "right" }) {
+export function SidebarIcon({ size = 19, className }: GlyphProps) {
   return (
     <Svg size={size} className={className} cap={false}>
       <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
-      <path d={`M${side === "left" ? 3 : 10} 3v10`} />
+      <path d="M3 3v10" />
     </Svg>
   );
 }
