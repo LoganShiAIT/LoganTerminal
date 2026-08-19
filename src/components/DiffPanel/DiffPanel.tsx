@@ -96,12 +96,12 @@ export default function DiffPanel() {
   );
 
   const segBtn = (active: boolean) =>
-    `h-full min-w-0 flex-1 truncate rounded-md px-1 text-[14px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+    `h-full min-w-0 flex-1 truncate rounded-md px-1 text-[12px] font-semibold uppercase tracking-[0.08em] transition-colors ${
       active ? "text-accent bg-accent/15 border border-accent/30" : "text-muted hover:text-ink"
     }`;
 
   const empty = (message: string) => (
-    <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[15px] leading-relaxed text-faint">
+    <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[13px] leading-relaxed text-faint">
       {message}
     </div>
   );
@@ -110,7 +110,7 @@ export default function DiffPanel() {
     if (!cwd) return empty(t("No active shell directory yet."));
     if (error) {
       return (
-        <div className="rounded-lg border border-dashed border-edge px-3 py-3 font-mono text-[14px] leading-relaxed break-all whitespace-pre-wrap text-faint">
+        <div className="rounded-lg border border-dashed border-edge px-3 py-3 font-mono text-[12px] leading-relaxed break-all whitespace-pre-wrap text-faint">
           {error}
         </div>
       );
@@ -159,7 +159,7 @@ export default function DiffPanel() {
           </button>
         </div>
         {branch && (
-          <div className="flex items-center gap-2 px-1 font-mono text-[14px] text-faint">
+          <div className="flex items-center gap-2 px-1 font-mono text-[12px] text-faint">
             <span className="truncate text-muted">{branch}</span>
             {dirtyTotal(dirty) > 0 && (
               <span className="flex shrink-0 items-center gap-1">

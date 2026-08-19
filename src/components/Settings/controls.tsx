@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 
 export const FIELD =
-  "w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[15px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50";
+  "w-full rounded-lg border border-edge bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[13px] text-ink placeholder:text-faint focus:outline-none focus:border-accent/50";
 
 export function Section({
   label,
@@ -17,7 +17,7 @@ export function Section({
 }) {
   return (
     <div>
-      <div className="text-[14px] uppercase tracking-[0.18em] text-muted mb-2">
+      <div className="text-[12px] uppercase tracking-[0.18em] text-muted mb-2">
         {label}
       </div>
       {children}
@@ -44,7 +44,7 @@ export function ChoiceButton({
     <button
       onClick={onClick}
       title={title}
-      className={`flex items-center gap-2 rounded-md border text-[15px] transition-colors ${
+      className={`flex items-center gap-2 rounded-md border text-[13px] transition-colors ${
         mono ? "h-7 px-2.5 font-mono" : "h-8 px-3"
       } ${
         selected
@@ -85,7 +85,7 @@ export function ToggleRow({
           }`}
         />
       </span>
-      <span className="text-[16px] text-ink/85">{label}</span>
+      <span className="text-[14px] text-ink/85">{label}</span>
     </button>
   );
 }
@@ -93,6 +93,6 @@ export function ToggleRow({
 /** Small explanatory paragraph under a control. */
 export function Hint({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[14px] leading-relaxed text-faint">{children}</div>
+    <div className="text-[12px] leading-relaxed text-faint">{children}</div>
   );
 }

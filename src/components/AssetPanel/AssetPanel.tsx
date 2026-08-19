@@ -120,10 +120,10 @@ export default function AssetPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
-        <div className="text-[14px] uppercase tracking-[0.18em] text-accent font-semibold">
+        <div className="text-[12px] uppercase tracking-[0.18em] text-accent font-semibold">
           {t("Assets")}
         </div>
-        <div className="font-mono text-[15px] text-muted mt-1 truncate">
+        <div className="font-mono text-[13px] text-muted mt-1 truncate">
           {isEmpty
             ? t("copy or screenshot to collect")
             : t("{clips} clipboard · {shots} shots", {
@@ -173,7 +173,7 @@ export default function AssetPanel() {
                     draggable={false}
                   />
                 ) : (
-                  <div className="px-2.5 py-2 font-mono text-[15px] leading-relaxed whitespace-pre-wrap break-all line-clamp-3 text-ink/90">
+                  <div className="px-2.5 py-2 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-all line-clamp-3 text-ink/90">
                     {item.preview}
                   </div>
                 )}
@@ -266,7 +266,7 @@ function Lightbox({
   }, [onClose]);
 
   const btn =
-    "h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40 disabled:pointer-events-none";
+    "h-7 px-3 rounded-md border border-edge text-[13px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40 disabled:pointer-events-none";
 
   // Portal to <body>: the sidebar's backdrop-filter would otherwise become
   // the containing block for this fixed overlay and clip it to the panel.
@@ -290,7 +290,7 @@ function Lightbox({
       <div className="flex items-center gap-2 rounded-xl border border-edge bg-raise/95 backdrop-blur-md px-3 py-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] animate-[card-in_0.2s_ease-out]">
         {data.path && (
           <span
-            className="max-w-[280px] truncate font-mono text-[14px] text-faint"
+            className="max-w-[280px] truncate font-mono text-[12px] text-faint"
             title={data.path}
           >
             {basename(data.path)}
@@ -336,11 +336,11 @@ function Section({
   return (
     <div className="p-2">
       <div className="flex items-center justify-between px-1 mb-1.5">
-        <span className="text-[14px] uppercase tracking-[0.18em] text-muted">
+        <span className="text-[12px] uppercase tracking-[0.18em] text-muted">
           {label}
         </span>
         {count > 0 && (
-          <span className="font-mono text-[14px] text-faint">{count}</span>
+          <span className="font-mono text-[12px] text-faint">{count}</span>
         )}
       </div>
       <div className="space-y-2">{children}</div>
@@ -350,7 +350,7 @@ function Section({
 
 function Placeholder({ text }: { text: string }) {
   return (
-    <div className="px-3 py-4 rounded-lg border border-dashed border-edge text-center text-[15px] leading-relaxed text-faint">
+    <div className="px-3 py-4 rounded-lg border border-dashed border-edge text-center text-[13px] leading-relaxed text-faint">
       {text}
     </div>
   );
@@ -390,7 +390,7 @@ function AssetCard({
     >
       {children}
       <button
-        className="absolute top-1.5 right-1.5 w-5 h-5 grid place-items-center rounded-md bg-black/60 backdrop-blur-sm text-ink/70 text-[15px] leading-none opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color] duration-150"
+        className="absolute top-1.5 right-1.5 w-5 h-5 grid place-items-center rounded-md bg-black/60 backdrop-blur-sm text-ink/70 text-[13px] leading-none opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color] duration-150"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
@@ -446,7 +446,7 @@ function AssetCard({
           </svg>
         </button>
       )}
-      <div className="h-6 px-2.5 flex items-center justify-between gap-2 text-[14px] text-faint border-t border-edge bg-ink/[0.02]">
+      <div className="h-6 px-2.5 flex items-center justify-between gap-2 text-[12px] text-faint border-t border-edge bg-ink/[0.02]">
         <span className="flex items-center gap-1.5">
           <span
             className={`w-1 h-1 rounded-full ${

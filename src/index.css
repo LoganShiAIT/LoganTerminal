@@ -345,8 +345,8 @@ body {
   border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
   background: color-mix(in srgb, var(--color-ink) 5%, transparent);
   font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--color-muted);
 }
 
@@ -385,7 +385,7 @@ body {
    here, so the few block elements marked output can produce are styled by
    hand — deliberately compact, this lives in a 360px sidebar. */
 .md-body {
-  font-size: 16.5px;
+  font-size: 14.5px;
   line-height: 1.65;
   color: color-mix(in srgb, var(--color-ink) 85%, transparent);
   word-break: break-word;

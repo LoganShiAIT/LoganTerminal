@@ -94,7 +94,7 @@ function RefChip({ name }: { name: string }) {
   const head = name.startsWith("HEAD");
   return (
     <span
-      className={`shrink-0 rounded px-1 py-px font-mono text-[13px] leading-[1.4] ${
+      className={`shrink-0 rounded px-1 py-px font-mono text-[11px] leading-[1.4] ${
         tag
           ? "bg-amber-400/10 text-amber-300/90"
           : head
@@ -133,19 +133,19 @@ function CommitDetail({ cwd, commit }: { cwd: string; commit: Commit }) {
 
   return (
     <div className="rounded-lg border border-accent/25 bg-ink/[0.03] p-1.5">
-      <div className="mb-1 flex items-center gap-2 px-1 font-mono text-[14px] text-faint">
+      <div className="mb-1 flex items-center gap-2 px-1 font-mono text-[12px] text-faint">
         <span className="truncate">{commit.author}</span>
         <span className="flex-1" />
         <span className="shrink-0">{new Date(commit.timestamp * 1000).toLocaleString()}</span>
       </div>
       {error ? (
-        <div className="px-1 py-1 font-mono text-[14px] break-all whitespace-pre-wrap text-red-300">
+        <div className="px-1 py-1 font-mono text-[12px] break-all whitespace-pre-wrap text-red-300">
           {error}
         </div>
       ) : summary === null ? (
-        <div className="px-1 py-1 text-[14px] text-faint">{t("Loading…")}</div>
+        <div className="px-1 py-1 text-[12px] text-faint">{t("Loading…")}</div>
       ) : summary.files.length === 0 ? (
-        <div className="px-1 py-1 text-[14px] text-faint">
+        <div className="px-1 py-1 text-[12px] text-faint">
           {t("No files here — merge commits list their changes on the parents.")}
         </div>
       ) : (
@@ -180,7 +180,7 @@ export default function CommitLog({ cwd, log }: { cwd: string; log: Log }) {
 
   if (log.commits.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[15px] leading-relaxed text-faint">
+      <div className="rounded-lg border border-dashed border-edge px-3 py-3 text-[13px] leading-relaxed text-faint">
         {t("No commits yet.")}
       </div>
     );
@@ -188,7 +188,7 @@ export default function CommitLog({ cwd, log }: { cwd: string; log: Log }) {
 
   return (
     <div>
-      <div className="mb-1 flex h-5 items-center gap-2 px-1 font-mono text-[14px] text-faint">
+      <div className="mb-1 flex h-5 items-center gap-2 px-1 font-mono text-[12px] text-faint">
         <span>{t("{n} commits", { n: log.commits.length })}</span>
         {log.base && ahead > 0 && (
           <span className="text-accent/80">
@@ -215,7 +215,7 @@ export default function CommitLog({ cwd, log }: { cwd: string; log: Log }) {
                 style={{ height: ROW_H }}
               >
                 <span
-                  className={`min-w-0 flex-1 truncate text-[15px] ${
+                  className={`min-w-0 flex-1 truncate text-[13px] ${
                     commit.ahead ? "text-ink" : "text-muted"
                   }`}
                 >
@@ -224,9 +224,9 @@ export default function CommitLog({ cwd, log }: { cwd: string; log: Log }) {
                 {commit.refs.slice(0, 2).map((r) => (
                   <RefChip key={r} name={r} />
                 ))}
-                <span className="shrink-0 font-mono text-[14px] text-faint">{commit.short}</span>
+                <span className="shrink-0 font-mono text-[12px] text-faint">{commit.short}</span>
                 <span
-                  className="w-[34px] shrink-0 text-right font-mono text-[14px] text-faint"
+                  className="w-[34px] shrink-0 text-right font-mono text-[12px] text-faint"
                   title={new Date(commit.timestamp * 1000).toLocaleString()}
                 >
                   {formatAgo(commit.timestamp)}

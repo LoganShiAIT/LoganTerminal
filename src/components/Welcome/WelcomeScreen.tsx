@@ -35,24 +35,24 @@ export default function WelcomeScreen() {
         </div>
       </div>
       <div className="text-center space-y-2">
-        <div className="title-shine text-[20px] font-bold uppercase tracking-[0.32em]">
+        <div className="title-shine text-[18px] font-bold uppercase tracking-[0.32em]">
           LoganTerminal
         </div>
-        <div className="font-mono text-[16px] text-muted">
+        <div className="font-mono text-[14px] text-muted">
           <span className="type-in">
             {t("a terminal built for AI coding agents")}
           </span>
         </div>
       </div>
       <button
-        className="px-4 py-1.5 rounded-full border border-accent/40 text-accent text-[18px] hover:bg-accent/10 hover:border-accent/70 hover:shadow-[0_0_24px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] transition-[color,border-color,box-shadow]"
+        className="px-4 py-1.5 rounded-full border border-accent/40 text-accent text-[16px] hover:bg-accent/10 hover:border-accent/70 hover:shadow-[0_0_24px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] transition-[color,border-color,box-shadow]"
         onClick={() => usePtyStore.getState().addTab()}
       >
         {t("New Terminal")}
       </button>
       <LaunchRow />
 
-      <div className="flex max-w-[80%] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[15px] text-faint">
+      <div className="flex max-w-[80%] flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[13px] text-faint">
         {SHORTCUTS.map(([keys, label]) => (
           <span key={keys} className="flex items-center gap-1.5">
             <span className="kbd">{kbd(keys)}</span> {t(label)}
@@ -80,7 +80,7 @@ function LaunchRow() {
       {visible.map((launcher) => (
         <button
           key={launcher.id}
-          className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-[15px] text-muted transition-colors hover:border-accent/50 hover:text-accent"
+          className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-[13px] text-muted transition-colors hover:border-accent/50 hover:text-accent"
           onClick={() => launchAgent(launcher, "tab")}
           title={t("New tab running {cmd}", {
             cmd: launchLine(launcher, bypass),

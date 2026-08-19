@@ -140,16 +140,16 @@ export function AgentLaunchersSection() {
                 title={l.enabled ? t("Hide from menus") : t("Show in menus")}
               />
               <span
-                className={`text-[16px] ${l.enabled ? "text-ink" : "text-faint line-through"}`}
+                className={`text-[14px] ${l.enabled ? "text-ink" : "text-faint line-through"}`}
               >
                 {l.name}
               </span>
-              <span className="ml-auto truncate font-mono text-[14px] text-faint">
+              <span className="ml-auto truncate font-mono text-[12px] text-faint">
                 {launchLine(l, bypass) || t("(no command)")}
               </span>
               {!l.builtin && (
                 <button
-                  className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[16px] leading-none text-muted hover:bg-accent hover:text-white transition-colors"
+                  className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[14px] leading-none text-muted hover:bg-accent hover:text-white transition-colors"
                   onClick={() => removeLauncher(l.id)}
                   title={t("Delete launcher")}
                 >
@@ -216,13 +216,13 @@ export function AgentLaunchersSection() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            className="h-7 px-3 rounded-md border border-edge text-[13px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
             onClick={add}
           >
             {t("Add launcher")}
           </button>
           <button
-            className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+            className="h-7 px-3 rounded-md border border-edge text-[13px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
             onClick={resetLaunchers}
             title={t("Drops custom launchers and every edit.")}
           >
@@ -248,7 +248,7 @@ export function AgentsSection() {
   return (
     <Section label={t("Agents")}>
       <div className="space-y-1.5">
-        <div className="text-[15px] text-muted">{t("Fleet command")}</div>
+        <div className="text-[13px] text-muted">{t("Fleet command")}</div>
         <input
           key={fleetCommand /* re-seed after external changes */}
           defaultValue={fleetCommand}
@@ -293,7 +293,7 @@ export function PromptsSection() {
     <Section label={t("Prompts")}>
       <div className="space-y-2">
         {prompts.length === 0 && (
-          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[15px] leading-relaxed text-faint">
+          <div className="px-3 py-3 rounded-lg border border-dashed border-edge text-[13px] leading-relaxed text-faint">
             {t(
               "Save prompts you feed your agents often — insert them from the command palette ({key}) into the focused terminal.",
               { key: kbd("⌘P") },
@@ -306,13 +306,13 @@ export function PromptsSection() {
             className="group flex items-start gap-2 rounded-lg border border-edge bg-ink/[0.03] px-2.5 py-2"
           >
             <div className="min-w-0 flex-1">
-              <div className="text-[16px] text-ink truncate">{p.title}</div>
-              <div className="font-mono text-[14px] text-faint whitespace-pre-wrap break-all line-clamp-2">
+              <div className="text-[14px] text-ink truncate">{p.title}</div>
+              <div className="font-mono text-[12px] text-faint whitespace-pre-wrap break-all line-clamp-2">
                 {p.text}
               </div>
             </div>
             <button
-              className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[16px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
+              className="w-5 h-5 shrink-0 grid place-items-center rounded-md text-[14px] leading-none text-muted opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-white transition-[opacity,background-color,color]"
               onClick={() => removePrompt(p.id)}
               title={t("Delete prompt")}
             >
@@ -330,7 +330,7 @@ export function PromptsSection() {
           className={`${FIELD} resize-y`}
         />
         <button
-          className="h-7 px-3 rounded-md border border-edge text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
+          className="h-7 px-3 rounded-md border border-edge text-[13px] text-muted transition-colors hover:border-accent/40 hover:text-accent"
           onClick={add}
         >
           {t("Add prompt")}

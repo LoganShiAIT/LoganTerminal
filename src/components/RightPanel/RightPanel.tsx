@@ -31,7 +31,7 @@ export default function RightPanel() {
   }, [index]);
 
   const btn = (active: boolean) =>
-    `relative z-10 h-full rounded-md text-[15px] font-semibold uppercase tracking-[0.12em] ${
+    `relative z-10 h-full rounded-md text-[13px] font-semibold uppercase tracking-[0.12em] ${
       active ? "text-accent" : "text-muted hover:text-ink"
     }`;
   const btnStyle = { transition: `color ${PILL_MS} ${EASE}` };
@@ -63,7 +63,7 @@ export default function RightPanel() {
           >
             {t("Review")}
             {attachmentCount > 0 && (
-              <span className="ml-1.5 inline-block min-w-[16px] rounded-full bg-accent/20 px-1 font-mono text-[13px] leading-[14px] text-accent">
+              <span className="ml-1.5 inline-block min-w-[16px] rounded-full bg-accent/20 px-1 font-mono text-[11px] leading-[14px] text-accent">
                 {attachmentCount}
               </span>
             )}

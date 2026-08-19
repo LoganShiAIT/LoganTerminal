@@ -75,12 +75,12 @@ export default function AgentLaunchMenu() {
           data-tauri-drag-region="false"
           className="absolute right-0 top-9 z-50 w-[290px] rounded-xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_18px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-[pop-in_0.12s_ease-out]"
         >
-          <div className="px-3 pt-2.5 pb-1.5 text-[14px] uppercase tracking-[0.18em] text-muted">
+          <div className="px-3 pt-2.5 pb-1.5 text-[12px] uppercase tracking-[0.18em] text-muted">
             {t("Launch agent")}
           </div>
 
           {visible.length === 0 ? (
-            <div className="px-3 pb-3 text-[15px] leading-relaxed text-faint">
+            <div className="px-3 pb-3 text-[13px] leading-relaxed text-faint">
               {t("No launchers enabled — turn one on in Settings.")}
             </div>
           ) : (
@@ -95,8 +95,8 @@ export default function AgentLaunchMenu() {
                   })}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-[16px]">{launcher.name}</div>
-                    <div className="truncate font-mono text-[14px] text-faint">
+                    <div className="text-[14px]">{launcher.name}</div>
+                    <div className="truncate font-mono text-[12px] text-faint">
                       {launchLine(launcher, bypass)}
                     </div>
                   </div>
@@ -134,12 +134,12 @@ export default function AgentLaunchMenu() {
                   }`}
                 />
               </span>
-              <span className="text-[15px] text-ink/75">
+              <span className="text-[13px] text-ink/75">
                 {t("bypass permissions")}
               </span>
             </button>
             <button
-              className="ml-auto text-[14px] text-faint transition-colors hover:text-accent"
+              className="ml-auto text-[12px] text-faint transition-colors hover:text-accent"
               onClick={() => {
                 setOpen(false);
                 useSettingsStore.getState().setPanelOpen(true);

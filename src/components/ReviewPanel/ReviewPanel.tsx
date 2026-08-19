@@ -149,10 +149,10 @@ export default function ReviewPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="px-3 pt-3 pb-2 border-b border-edge shrink-0">
-        <div className="text-[14px] uppercase tracking-[0.18em] text-accent font-semibold">
+        <div className="text-[12px] uppercase tracking-[0.18em] text-accent font-semibold">
           {t("File Review")}
         </div>
-        <div className="font-mono text-[15px] text-muted mt-1 truncate">
+        <div className="font-mono text-[13px] text-muted mt-1 truncate">
           {attachments.length === 0
             ? t("drop files or folders to attach")
             : t("{n} attached", { n: attachments.length })}
@@ -195,15 +195,15 @@ export default function ReviewPanel() {
           <div className="border-b border-edge p-2 shrink-0">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="truncate text-[18px] font-medium text-ink">
+                <div className="truncate text-[16px] font-medium text-ink">
                   {selectedName || t("No file selected")}
                 </div>
-                <div className="truncate font-mono text-[14px] text-faint">
+                <div className="truncate font-mono text-[12px] text-faint">
                   {selectedPath ?? t("Attach or select a path to review")}
                 </div>
               </div>
               {dirty && (
-                <span className="shrink-0 rounded-full border border-accent/40 px-2 py-0.5 text-[14px] text-accent">
+                <span className="shrink-0 rounded-full border border-accent/40 px-2 py-0.5 text-[12px] text-accent">
                   {t("unsaved")}
                 </span>
               )}
@@ -240,18 +240,18 @@ export default function ReviewPanel() {
               {draft.trim() ? (
                 <MarkdownPreview source={draft} />
               ) : (
-                <div className="text-[15px] text-faint">{t("empty")}</div>
+                <div className="text-[13px] text-faint">{t("empty")}</div>
               )}
             </div>
           ) : state === "ready" ? (
             <textarea
-              className="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-[16px] leading-relaxed text-ink outline-none"
+              className="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-[14px] leading-relaxed text-ink outline-none"
               spellCheck={false}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center p-5 text-center text-[16px] leading-relaxed text-muted">
+            <div className="flex min-h-0 flex-1 items-center justify-center p-5 text-center text-[14px] leading-relaxed text-muted">
               {state === "loading"
                 ? t("Loading...")
                 : message || t("Select a text file to review.")}
@@ -259,7 +259,7 @@ export default function ReviewPanel() {
           )}
 
           {message && state === "ready" && (
-            <div className="border-t border-edge px-3 py-1.5 text-[15px] text-muted">
+            <div className="border-t border-edge px-3 py-1.5 text-[13px] text-muted">
               {message}
             </div>
           )}
@@ -400,10 +400,10 @@ function DirectoryChildren({
   );
 
   if (loading) {
-    return <div className="px-2 py-1 text-[15px] text-faint">Loading...</div>;
+    return <div className="px-2 py-1 text-[13px] text-faint">Loading...</div>;
   }
   if (error) {
-    return <div className="px-2 py-1 text-[15px] text-red-400">{error}</div>;
+    return <div className="px-2 py-1 text-[13px] text-red-400">{error}</div>;
   }
   return <div>{childRows}</div>;
 }
@@ -429,7 +429,7 @@ function PathRow({
 }) {
   return (
     <div
-      className={`group flex h-7 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-[16px] transition-colors ${
+      className={`group flex h-7 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-[14px] transition-colors ${
         active
           ? "bg-accent/15 text-accent"
           : "text-ink/80 hover:bg-accent/[0.07] hover:text-ink"
@@ -448,7 +448,7 @@ function PathRow({
       >
         {kind === "directory" ? (expanded ? "v" : ">") : ""}
       </button>
-      <span className="shrink-0 text-[15px] text-faint">
+      <span className="shrink-0 text-[13px] text-faint">
         {kind === "directory" ? "dir" : "txt"}
       </span>
       <span className="min-w-0 flex-1 truncate">{name}</span>
@@ -470,7 +470,7 @@ function PanelButton({
 }) {
   return (
     <button
-      className="h-7 rounded-md border border-edge px-2 text-[15px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+      className="h-7 rounded-md border border-edge px-2 text-[13px] text-muted transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
       disabled={disabled}
       onClick={onClick}
       title={title}
@@ -483,7 +483,7 @@ function PanelButton({
 function Placeholder() {
   const t = useT();
   return (
-    <div className="rounded-lg border border-dashed border-edge px-3 py-5 text-center text-[15px] leading-relaxed text-faint">
+    <div className="rounded-lg border border-dashed border-edge px-3 py-5 text-center text-[13px] leading-relaxed text-faint">
       {t("Drop files or folders here to review them.")}
     </div>
   );

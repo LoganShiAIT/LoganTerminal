@@ -23,7 +23,7 @@ const CLAUDE_CACHE_WINDOW_MS = 5 * 60 * 1000;
 const SLOW_COMMAND_MS = 2000;
 
 const CHIP =
-  "flex items-center gap-1 px-2 py-0.5 rounded-full text-[14px] font-mono border";
+  "flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-mono border";
 
 /**
  * The right-hand end of the header: everything worth knowing about the
@@ -52,7 +52,7 @@ function BroadcastChip({ tabId }: { tabId: string }) {
   const t = useT();
   return (
     <button
-      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[14px] font-semibold uppercase tracking-[0.14em] text-white bg-accent border border-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
+      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-semibold uppercase tracking-[0.14em] text-white bg-accent border border-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_45%,transparent)]"
       onClick={() => usePtyStore.getState().toggleBroadcast(tabId)}
       title={t(
         "Broadcast is ON — keystrokes go to every pane in this tab. Click to turn off.",
@@ -67,7 +67,7 @@ function AttentionChip({ count }: { count: number }) {
   const t = useT();
   return (
     <button
-      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[14px] font-mono font-semibold text-accent bg-accent/15 border border-accent/40 hover:bg-accent hover:text-white transition-colors"
+      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-mono font-semibold text-accent bg-accent/15 border border-accent/40 hover:bg-accent hover:text-white transition-colors"
       onClick={() => {
         usePtyStore.getState().jumpToAttention();
         requestAnimationFrame(() => sendTermCmd("focus"));
@@ -119,7 +119,7 @@ function AgentChip({ pane }: { pane: LeafPane }) {
   if (!pane.agentName || pane.exited) return null;
   return (
     <span
-      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[14px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
+      className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-semibold uppercase tracking-[0.14em] text-accent bg-accent/15 border border-accent/40"
       title={t("Detected agent: {name}", { name: pane.agentName })}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
@@ -156,7 +156,7 @@ function IdleTimerChip({ pane }: { pane: LeafPane }) {
 
   return (
     <button
-      className={`group relative isolate flex h-6 min-w-[86px] items-center gap-1.5 overflow-hidden rounded-full border px-2 font-mono text-[14px] transition-colors ${
+      className={`group relative isolate flex h-6 min-w-[86px] items-center gap-1.5 overflow-hidden rounded-full border px-2 font-mono text-[12px] transition-colors ${
         idleSince
           ? cacheOpen
             ? "border-accent/40 text-accent bg-accent/10 hover:bg-accent/15"
@@ -252,7 +252,7 @@ function SessionChip({
 
   return (
     <span
-      className="flex items-center gap-1.5 font-mono text-[15px] text-muted"
+      className="flex items-center gap-1.5 font-mono text-[13px] text-muted"
       title={
         pane?.sessionId
           ? t("session {id}", { id: pane.sessionId.slice(0, 8) }) +

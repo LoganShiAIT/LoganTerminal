@@ -192,7 +192,7 @@ export default function FileSearch() {
           type="text"
           spellCheck={false}
           placeholder={t("Find a file or folder — fuzzy, matches the whole path")}
-          className="flex-1 bg-transparent font-mono text-[17px] text-ink placeholder:text-faint focus:outline-none"
+          className="flex-1 bg-transparent font-mono text-[15px] text-ink placeholder:text-faint focus:outline-none"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -224,7 +224,7 @@ export default function FileSearch() {
           {t("in")}
         </span>
         <span
-          className="min-w-0 flex-1 truncate font-mono text-[15px] text-muted"
+          className="min-w-0 flex-1 truncate font-mono text-[13px] text-muted"
           title={root}
         >
           {root ? tildify(root, home) : "…"}
@@ -244,7 +244,7 @@ export default function FileSearch() {
         {KINDS.map((k) => (
           <button
             key={k.id}
-            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[14px] transition-colors ${
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[12px] transition-colors ${
               kind === k.id
                 ? "bg-accent/15 text-accent"
                 : "text-faint hover:bg-ink/5 hover:text-muted"
@@ -278,7 +278,7 @@ export default function FileSearch() {
             </span>
             {hit.is_repo && (
               <span
-                className="shrink-0 rounded-full border border-accent/35 px-1.5 py-px text-[13px] font-semibold uppercase tracking-[0.12em] text-accent"
+                className="shrink-0 rounded-full border border-accent/35 px-1.5 py-px text-[11px] font-semibold uppercase tracking-[0.12em] text-accent"
                 title={t("Git repository")}
               >
                 {t("repo")}
@@ -340,7 +340,7 @@ function ScopeButton({
 }) {
   return (
     <button
-      className="shrink-0 rounded-md px-1.5 py-0.5 text-[14px] text-faint transition-colors hover:bg-ink/5 hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-faint"
+      className="shrink-0 rounded-md px-1.5 py-0.5 text-[12px] text-faint transition-colors hover:bg-ink/5 hover:text-accent disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-faint"
       disabled={disabled}
       onClick={onClick}
       title={title}
@@ -362,7 +362,7 @@ function RowButton({
 }) {
   return (
     <button
-      className="grid h-5 min-w-[20px] place-items-center rounded px-1 font-mono text-[14px] text-faint transition-colors hover:bg-ink/10 hover:text-accent"
+      className="grid h-5 min-w-[20px] place-items-center rounded px-1 font-mono text-[12px] text-faint transition-colors hover:bg-ink/10 hover:text-accent"
       title={title}
       onClick={(e) => {
         e.stopPropagation();

@@ -69,7 +69,7 @@ export function ThemeSection() {
             }`}
             style={{ backgroundColor: theme.ui.base }}
           >
-            <div className="flex items-end gap-1 font-mono text-[18px] mb-2">
+            <div className="flex items-end gap-1 font-mono text-[16px] mb-2">
               <span style={{ color: theme.ui.accent }}>❯</span>
               <span
                 className="inline-block w-[0.5em] h-[1em] rounded-[1px]"
@@ -77,7 +77,7 @@ export function ThemeSection() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[16px]" style={{ color: theme.ui.ink }}>
+              <span className="text-[14px]" style={{ color: theme.ui.ink }}>
                 {theme.name}
               </span>
               <span className="flex gap-1">
@@ -116,7 +116,7 @@ export function AccentSection() {
   const isCustom = Boolean(accentOverride) && !isPreset;
 
   const pill = (selected: boolean) =>
-    `h-7 px-2.5 rounded-full border text-[15px] transition-colors ${
+    `h-7 px-2.5 rounded-full border text-[13px] transition-colors ${
       selected
         ? "border-accent text-accent bg-accent/10"
         : "border-edge text-muted hover:text-ink hover:border-accent/40"
@@ -186,7 +186,7 @@ export function FontSizeSection() {
         >
           −
         </button>
-        <span className="font-mono text-[18px] text-ink w-8 text-center">
+        <span className="font-mono text-[16px] text-ink w-8 text-center">
           {fontSize}
         </span>
         <button
@@ -199,7 +199,7 @@ export function FontSizeSection() {
         </button>
         {fontSize !== DEFAULT_FONT_SIZE && (
           <button
-            className="h-7 px-2.5 rounded-md text-[15px] text-muted hover:text-ink hover:bg-ink/5 transition-colors"
+            className="h-7 px-2.5 rounded-md text-[13px] text-muted hover:text-ink hover:bg-ink/5 transition-colors"
             onClick={reset}
             title={t("Reset ({key})", { key: kbd("⌘0") })}
           >
@@ -233,7 +233,7 @@ export function CursorSection() {
             selected={s.id === cursorStyle}
             onClick={() => setCursorStyle(s.id)}
           >
-            <span className="font-mono text-[17px] leading-none">{s.glyph}</span>
+            <span className="font-mono text-[15px] leading-none">{s.glyph}</span>
             {s.name}
           </ChoiceButton>
         ))}
@@ -287,7 +287,7 @@ function AnimSpeedRow() {
 
   return (
     <div className="mb-3">
-      <div className="mb-1.5 text-[15px] text-muted">{t("Animation speed")}</div>
+      <div className="mb-1.5 text-[13px] text-muted">{t("Animation speed")}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         {ANIM_SPEEDS.map((speed) => (
           <ChoiceButton

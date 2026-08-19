@@ -150,7 +150,7 @@ export default function AgentDashboard() {
               <span
                 className={`w-2 h-2 rounded-full shrink-0 ${stateDotClass(row.state)}`}
               />
-              <span className="font-mono text-[14px] text-faint shrink-0 w-8">
+              <span className="font-mono text-[12px] text-faint shrink-0 w-8">
                 tab {row.tabIndex + 1}
               </span>
               <span
@@ -161,12 +161,12 @@ export default function AgentDashboard() {
                 {row.agentName ?? "shell"}
               </span>
               {where && (
-                <span className="truncate font-mono text-[15px] text-muted">
+                <span className="truncate font-mono text-[13px] text-muted">
                   {where}
                 </span>
               )}
               {row.gitBranch && (
-                <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded-full border border-edge bg-ink/5 font-mono text-[14px] text-muted">
+                <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded-full border border-edge bg-ink/5 font-mono text-[12px] text-muted">
                   <BranchIcon />
                   <span className="max-w-[120px] truncate">{row.gitBranch}</span>
                   <GitDirtyCounts
@@ -184,13 +184,13 @@ export default function AgentDashboard() {
                 )}
                 {age && (
                   <span
-                    className="font-mono text-[14px] text-faint"
+                    className="font-mono text-[12px] text-faint"
                     title={t("Waiting on you since this agent went idle")}
                   >
                     {age}
                   </span>
                 )}
-                <span className={`font-mono text-[14px] ${stateTextClass(row.state)}`}>
+                <span className={`font-mono text-[12px] ${stateTextClass(row.state)}`}>
                   {stateLabel(row)}
                 </span>
               </span>

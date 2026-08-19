@@ -79,7 +79,7 @@ export default function TerminalSearch({
         type="text"
         spellCheck={false}
         placeholder={t("find")}
-        className="w-40 bg-transparent font-mono text-[16px] text-ink placeholder:text-faint focus:outline-none"
+        className="w-40 bg-transparent font-mono text-[14px] text-ink placeholder:text-faint focus:outline-none"
         onChange={(e) => {
           const q = e.target.value;
           if (q) {
@@ -104,7 +104,7 @@ export default function TerminalSearch({
           }
         }}
       />
-      <span className="font-mono text-[14px] text-faint min-w-[3.2em] text-center shrink-0">
+      <span className="font-mono text-[12px] text-faint min-w-[3.2em] text-center shrink-0">
         {match ? (match.count > 0 ? `${match.index + 1}/${match.count}` : "0/0") : ""}
       </span>
       <button
@@ -122,7 +122,7 @@ export default function TerminalSearch({
         <ChevronIcon dir="down" />
       </button>
       <button
-        className={`${iconButton} text-[17px] leading-none`}
+        className={`${iconButton} text-[15px] leading-none`}
         onClick={close}
         title={t("Close (esc)")}
       >

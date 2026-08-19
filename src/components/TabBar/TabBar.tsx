@@ -219,7 +219,7 @@ export default function TabBar() {
                   }
                 : undefined
             }
-            className={`group relative flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[16px] max-w-[230px] shrink-0 animate-[tab-in_0.16s_ease-out] ${
+            className={`group relative flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[14px] max-w-[230px] shrink-0 animate-[tab-in_0.16s_ease-out] ${
               isDragging
                 ? "cursor-grabbing bg-raise text-ink shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-accent/40"
                 : "cursor-pointer transition-colors duration-100"
@@ -252,20 +252,20 @@ export default function TabBar() {
             </span>
             {leaves.length > 1 && (
               <span
-                className="text-[13px] font-mono text-faint shrink-0"
+                className="text-[11px] font-mono text-faint shrink-0"
                 title={t("{n} panes", { n: leaves.length })}
               >
                 ◫{leaves.length}
               </span>
             )}
             {i < 9 && (
-              <span className="text-[13px] font-mono text-faint shrink-0">
+              <span className="text-[11px] font-mono text-faint shrink-0">
                 {i + 1}
               </span>
             )}
             {(tabs.length > 1 || allExited) && (
               <button
-                className="w-5 h-5 -mr-1 grid place-items-center rounded text-[15px] leading-none opacity-0 group-hover:opacity-100 text-muted hover:text-ink hover:bg-ink/10 transition-opacity shrink-0"
+                className="w-5 h-5 -mr-1 grid place-items-center rounded text-[13px] leading-none opacity-0 group-hover:opacity-100 text-muted hover:text-ink hover:bg-ink/10 transition-opacity shrink-0"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(tab.id);
@@ -285,7 +285,7 @@ export default function TabBar() {
         />
       )}
       <button
-        className="w-7 h-7 grid place-items-center rounded-lg text-[20px] leading-none text-muted hover:text-accent hover:bg-accent/[0.08] transition-[color,background-color] duration-150 shrink-0"
+        className="w-7 h-7 grid place-items-center rounded-lg text-[18px] leading-none text-muted hover:text-accent hover:bg-accent/[0.08] transition-[color,background-color] duration-150 shrink-0"
         onClick={handleNewTab}
         title={t("New terminal ({key})", { key: kbd("⌘T") })}
       >
