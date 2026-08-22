@@ -118,21 +118,36 @@ export function ClockIcon({ size = 15, className = "shrink-0" }: GlyphProps) {
   );
 }
 
+/**
+ * Settings: a proper cog — hub, rim, and eight teeth welded onto the rim.
+ *
+ * Every tooth runs from r=4.4 (on the rim, so the round cap overlaps it) out
+ * to r=6.1, on the four compass points and the four diagonals. That 8-fold
+ * symmetry is the whole point: the glyph reads the same however you squint.
+ */
 export function GearIcon({ size = 18, className }: GlyphProps) {
   return (
     <Svg size={size} className={className}>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M12.4 3.6l-1.2 1.2M4.8 11.2l-1.2 1.2" />
+      <circle cx="8" cy="8" r="4.4" />
+      <circle cx="8" cy="8" r="1.7" />
+      <path d="M8 3.6V1.9M8 12.4v1.7M3.6 8H1.9M12.4 8h1.7" />
+      <path d="M4.9 4.9 3.7 3.7M11.1 11.1l1.2 1.2M11.1 4.9l1.2-1.2M4.9 11.1l-1.2 1.2" />
     </Svg>
   );
 }
 
-/** Panel toggle: a framed area with the named edge highlighted. */
+/**
+ * Sidebar toggle: a window frame with a rail split off the left edge.
+ *
+ * The divider sits at x=6 — clear of the corner radius, and far enough from
+ * centre that it never reads as {@link SplitIcon}, which is the same frame cut
+ * exactly in half. Butt caps let the divider die into the frame cleanly.
+ */
 export function SidebarIcon({ size = 19, className }: GlyphProps) {
   return (
     <Svg size={size} className={className} cap={false}>
-      <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
-      <path d="M3 3v10" />
+      <rect x="2.5" y="3" width="11" height="10" rx="1.8" />
+      <path d="M6 3v10" />
     </Svg>
   );
 }
