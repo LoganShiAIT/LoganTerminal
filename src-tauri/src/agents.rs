@@ -3,21 +3,24 @@ use std::thread;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::pty::PtyManager;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
-/// Binary names we recognize as coding agents. Kept lowercase.
+/// Names we recognize as coding agents — a process name for a native binary,
+/// an entry-script name for a scripted one. Kept lowercase.
 ///
 /// Everything the launcher menu can start (see `src/lib/agentLaunchers.ts`)
 /// belongs here too, or a one-click launch would run an agent the badge, the
 /// dashboard and the idle timer all treat as a plain shell. Names to watch:
-/// `agy` is Antigravity's actual binary (there is no `antigravity` one), and
+/// `agy` is Antigravity's actual binary (there is no `antigravity` one),
 /// ZCode's runtime runs through its Electron shell, so the process shows up as
-/// `ZCode` — matched case-insensitively below.
+/// `ZCode` — matched case-insensitively below — and Qoder needs both of its
+/// spellings, because which one appears depends on how it was started (see
+/// `agent_of_parts`).
 const AGENT_NAMES: &[&str] = &[
     "claude",
     "codex",
@@ -33,7 +36,23 @@ const AGENT_NAMES: &[&str] = &[
     "goose",
     "opencode",
     "kiro",
+    "qoder",
+    "qodercli",
 ];
+
+/// Interpreters that run an agent as a script rather than being one.
+///
+/// A shebang script is executed as `<interpreter> <script>`, so the process
+/// table only ever shows the interpreter — an npm-installed agent is `node`
+/// and a pipx-installed one is `python3.13`. Matching names alone therefore
+/// misses Qoder, DeepSeek Harness and Aider entirely; for these, argv is
+/// consulted instead. Anything starting with `python` counts, since those
+/// binaries carry their version in the name.
+const SCRIPT_RUNNERS: &[&str] = &["node", "bun", "deno", "python"];
+
+/// Entry-script extensions, stripped before matching so that the observed
+/// `qodercli.js` lines up with the `qodercli` in `AGENT_NAMES`.
+const SCRIPT_EXTS: &[&str] = &[".js", ".mjs", ".cjs", ".ts", ".py"];
 
 #[derive(Default)]
 pub struct AgentState {
@@ -58,7 +77,18 @@ pub fn spawn_monitor(app: AppHandle) {
                 continue;
             }
 
-            sys.refresh_processes(ProcessesToUpdate::All, true);
+            // Argv, and nothing else. The convenience `refresh_processes`
+            // collects cpu, memory and disk usage this monitor never reads,
+            // and leaves out the one field it needs — without `with_cmd` the
+            // command line comes back empty for every process, which is what
+            // hid every scripted agent (see `agent_of_parts`). `OnlyIfNotSet`
+            // because argv is fixed at exec: fetch it once per process, not
+            // every two seconds.
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                ProcessRefreshKind::nothing().with_cmd(UpdateKind::OnlyIfNotSet),
+            );
             let children_of = build_children_map(&sys);
 
             let agent_state = app.state::<AgentState>();
@@ -117,13 +147,8 @@ fn find_agent_in_tree(
         };
         for child in children {
             if let Some(proc) = sys.process(*child) {
-                let name = proc.name().to_string_lossy();
-                let normalized = strip_exe_suffix(&name);
-                if AGENT_NAMES
-                    .iter()
-                    .any(|a| normalized.eq_ignore_ascii_case(a))
-                {
-                    return Some(normalized.to_string());
+                if let Some(agent) = agent_of(proc) {
+                    return Some(agent);
                 }
                 queue.push(*child);
             }
@@ -132,14 +157,98 @@ fn find_agent_in_tree(
     None
 }
 
+/// The agent a live process represents, if any.
+fn agent_of(proc: &sysinfo::Process) -> Option<String> {
+    let name = proc.name().to_string_lossy();
+    // argv[0] is the interpreter itself and flags may precede the script, so
+    // the entry script is the first argument after argv[0] that isn't a flag.
+    let script = proc
+        .cmd()
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy())
+        .find(|arg| !arg.starts_with('-'));
+    agent_of_parts(&name, script.as_deref())
+}
+
+/// The matching rules, split out from the process table so they can be tested.
+///
+/// Two shapes have to be recognized. A native binary (claude, codex, opencode)
+/// puts its own name in the process table, so the name is matched directly. A
+/// scripted one is invisible that way — the process is `node` or `python` —
+/// so its entry script's file name is matched instead.
+///
+/// What that script path looks like depends on how the tool was started, and
+/// both forms show up in practice: the kernel passes the path *as invoked*, so
+/// a bin symlink keeps its own name (typing `dsh` yields `node …/bin/dsh`,
+/// giving `dsh`), while a dispatcher that spawns a resolved bundle reports
+/// that instead (`qoder` re-launches `node …/bundle/qodercli.js`, giving
+/// `qodercli`) — which is why Qoder is listed under both spellings.
+///
+/// The script name has to match an entry outright, not merely contain one, or
+/// a personal `node ~/claude-notes.js` would light up the agent badge.
+fn agent_of_parts(name: &str, script: Option<&str>) -> Option<String> {
+    let name = strip_exe_suffix(base_name(name));
+    if let Some(agent) = match_agent(name) {
+        return Some(agent);
+    }
+    if !is_script_runner(name) {
+        return None;
+    }
+    let script = strip_script_ext(strip_exe_suffix(base_name(script?)));
+    match_agent(script)
+}
+
+fn match_agent(candidate: &str) -> Option<String> {
+    AGENT_NAMES
+        .iter()
+        .any(|a| candidate.eq_ignore_ascii_case(a))
+        .then(|| candidate.to_string())
+}
+
+fn is_script_runner(name: &str) -> bool {
+    SCRIPT_RUNNERS.iter().any(|r| {
+        name.eq_ignore_ascii_case(r)
+            || (*r == "python" && name.len() > r.len() && name[..r.len()].eq_ignore_ascii_case(r))
+    })
+}
+
+/// Last path segment, for both separators — a Windows agent arrives as
+/// `node C:\Users\...\qodercli.js`.
+fn base_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
 /// Windows reports process names with a `.exe` suffix (e.g. "claude.exe"),
 /// which never matches `AGENT_NAMES` as-is. macOS/Linux names have no
 /// extension, so this is a no-op there.
 fn strip_exe_suffix(name: &str) -> &str {
-    if name.len() > 4 && name[name.len() - 4..].eq_ignore_ascii_case(".exe") {
-        &name[..name.len() - 4]
-    } else {
-        name
+    strip_suffix_ci(name, ".exe")
+}
+
+fn strip_script_ext(name: &str) -> &str {
+    SCRIPT_EXTS
+        .iter()
+        .find_map(|ext| {
+            let trimmed = strip_suffix_ci(name, ext);
+            (trimmed.len() < name.len()).then_some(trimmed)
+        })
+        .unwrap_or(name)
+}
+
+/// `str::strip_suffix`, case-insensitively, and never panicking: `get` returns
+/// `None` rather than slicing through a multi-byte character, which a name
+/// like "钉钉会议" in the process tree would otherwise do.
+fn strip_suffix_ci<'a>(name: &'a str, suffix: &str) -> &'a str {
+    let Some(cut) = name.len().checked_sub(suffix.len()) else {
+        return name;
+    };
+    if cut == 0 {
+        return name;
+    }
+    match name.get(cut..) {
+        Some(tail) if tail.eq_ignore_ascii_case(suffix) => &name[..cut],
+        _ => name,
     }
 }
 
@@ -165,5 +274,72 @@ mod tests {
         assert_eq!(strip_exe_suffix(""), "");
         assert_eq!(strip_exe_suffix("sh"), "sh");
         assert_eq!(strip_exe_suffix(".exe"), ".exe");
+    }
+
+    // The monitor walks every process under every shell, so one CJK-named
+    // process used to be enough to slice through a character boundary and
+    // take the whole thread down.
+    #[test]
+    fn does_not_panic_on_multi_byte_names() {
+        assert_eq!(strip_exe_suffix("钉钉会议"), "钉钉会议");
+        assert_eq!(strip_script_ext("微信"), "微信");
+    }
+
+    #[test]
+    fn matches_a_native_binary_by_its_process_name() {
+        assert_eq!(agent_of_parts("claude", None).as_deref(), Some("claude"));
+        assert_eq!(
+            agent_of_parts("claude.exe", None).as_deref(),
+            Some("claude"),
+        );
+        assert_eq!(agent_of_parts("ZCode", None).as_deref(), Some("ZCode"));
+        assert_eq!(agent_of_parts("bash", None), None);
+    }
+
+    // The reason this function exists: npm- and pipx-installed agents run as
+    // `node`/`python`, so the process name says nothing about which tool it is.
+    #[test]
+    fn falls_back_to_the_entry_script_for_interpreters() {
+        // A bin symlink keeps its own name: typing `dsh` runs `node …/bin/dsh`.
+        assert_eq!(
+            agent_of_parts("node", Some("/opt/node/bin/dsh")).as_deref(),
+            Some("dsh"),
+        );
+        // Qoder's dispatcher re-launches the resolved bundle instead.
+        assert_eq!(
+            agent_of_parts("node", Some("/opt/@qoder-ai/qodercli/bundle/qodercli.js")).as_deref(),
+            Some("qodercli"),
+        );
+        assert_eq!(
+            agent_of_parts("python3.13", Some("/opt/pipx/bin/aider.py")).as_deref(),
+            Some("aider"),
+        );
+        assert_eq!(
+            agent_of_parts("node.exe", Some("C:\\npm\\node_modules\\qoder.js")).as_deref(),
+            Some("qoder"),
+        );
+    }
+
+    #[test]
+    fn ignores_interpreter_flags_before_the_script() {
+        assert_eq!(
+            agent_of_parts("node", Some("--enable-source-maps")),
+            None,
+            "callers pass the first non-flag argument; a flag reaching here is not a script",
+        );
+    }
+
+    // A name that merely contains an agent's is somebody's own script.
+    #[test]
+    fn does_not_match_a_script_that_only_looks_like_an_agent() {
+        assert_eq!(agent_of_parts("node", Some("~/claude-notes.js")), None);
+        assert_eq!(agent_of_parts("node", Some("/srv/my-codex/app.js")), None);
+    }
+
+    // Only interpreters get the argv treatment; a real binary's arguments are
+    // its own business.
+    #[test]
+    fn does_not_read_argv_for_a_non_interpreter() {
+        assert_eq!(agent_of_parts("vim", Some("/tmp/claude")), None);
     }
 }
