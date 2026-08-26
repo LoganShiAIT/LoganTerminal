@@ -69,6 +69,9 @@ describe("mergeLaunchers", () => {
       // dsh has no bypass flag at all — the setting is an env assignment,
       // which has to land *before* the command to take effect.
       "DSH_PERMISSION_MODE=danger-full-access dsh web",
+      // `--yolo` is Qoder's shortcut for `--permission-mode
+      // bypass_permissions`; it also answers to Claude Code's spelling.
+      "qoder --yolo",
       "opencode --auto",
     ]);
   });
@@ -85,6 +88,7 @@ describe("mergeLaunchers", () => {
       "codex",
       "antigravity",
       "deepseek-harness",
+      "qoder",
       "opencode",
     ]);
   });

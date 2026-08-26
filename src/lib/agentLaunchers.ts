@@ -108,6 +108,26 @@ export const DEFAULT_LAUNCHERS: readonly AgentLauncher[] = [
     builtin: true,
   },
   {
+    // Two bins ship in `@qoder-ai/qodercli`: `qoder` (a dispatcher) and
+    // `qodercli` (the bundle it runs). `qoder` is the one Qoder's own docs
+    // tell people to type, so that is what the launcher uses — the process
+    // monitor in `src-tauri/src/agents.rs` watches for both.
+    //
+    // Verified against 1.1.31's own parser, not the docs: `--yolo` is
+    // registered but `.hideHelp()`-ed, so it is absent from `--help` while
+    // still being accepted, and the bundle collapses it with Claude Code's
+    // spelling — `(dangerouslySkipPermissions || yolo) => permissionMode =
+    // "bypass_permissions"`. Either flag works; `--yolo` is the one Qoder
+    // itself prints in its own "to resume this session" hint.
+    id: "qoder",
+    name: "Qoder",
+    command: "qoder",
+    bypassArgs: "--yolo",
+    bypassEnv: "",
+    enabled: true,
+    builtin: true,
+  },
+  {
     // The gentlest of the bunch, and the only one that stays gentle: its own
     // help reads "auto-approve permissions that are not explicitly denied
     // (dangerous!)" — so a `deny` rule in opencode.json still wins, unlike the
