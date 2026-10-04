@@ -75,136 +75,138 @@ export default function App() {
         </Sidebar>
         <ResizeHandle active={sidebarOpen} />
 
-        <main
-          ref={mainRef}
-          className="workspace-main flex-1 min-w-0 relative bg-panel"
-        >
-          {tabs.length === 0 && entries.length === 0 && <WelcomeScreen />}
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              data-terminal-tab={tab.id}
-              className={
-                tab.id === activeId && !narrowReader
-                  ? "absolute inset-y-0 left-0 terminal-surface"
-                  : "hidden"
-              }
-              style={{
-                width:
-                  tab.id === activeId && companionVisible && mainWidth >= 760
-                    ? `${(1 - ratio) * 100}%`
-                    : "100%",
-              }}
-              onMouseDownCapture={() =>
-                useWorkspaceStore
-                  .getState()
-                  .focusTerminal(tab.id, tab.activePaneId)
-              }
-            >
-              <PaneTree
-                tab={tab}
-                tabActive={
-                  tab.id === activeId &&
-                  focus?.kind === "terminal" &&
-                  !narrowReader
-                }
-              />
-              <CrtOverlay />
-            </div>
-          ))}
-          {entries
-            .filter((e) => e.kind === "document")
-            .map((e) => (
+        <div className="workspace-frame flex flex-1 min-w-0">
+          <main
+            ref={mainRef}
+            className="workspace-main flex-1 min-w-0 relative bg-panel"
+          >
+            {tabs.length === 0 && entries.length === 0 && <WelcomeScreen />}
+            {tabs.map((tab) => (
               <div
-                key={`reader-${e.id}`}
+                key={tab.id}
+                data-terminal-tab={tab.id}
                 className={
-                  e.id === activeId
-                    ? "absolute inset-0 reader-surface"
+                  tab.id === activeId && !narrowReader
+                    ? "absolute inset-y-0 left-0 terminal-surface"
                     : "hidden"
                 }
+                style={{
+                  width:
+                    tab.id === activeId && companionVisible && mainWidth >= 760
+                      ? `${(1 - ratio) * 100}%`
+                      : "100%",
+                }}
+                onMouseDownCapture={() =>
+                  useWorkspaceStore
+                    .getState()
+                    .focusTerminal(tab.id, tab.activePaneId)
+                }
               >
-                <DocumentReader id={e.id} />
+                <PaneTree
+                  tab={tab}
+                  tabActive={
+                    tab.id === activeId &&
+                    focus?.kind === "terminal" &&
+                    !narrowReader
+                  }
+                />
+                <CrtOverlay />
               </div>
             ))}
-          {entries
-            .filter((e) => e.kind === "terminal" && e.companionId)
-            .map(
-              (e) =>
-                e.kind === "terminal" && (
-                  <div
-                    key={`companion-${e.id}`}
-                    className={
-                      e.id === activeId && companionVisible
-                        ? "absolute inset-y-0 right-0 reader-surface"
-                        : "hidden"
-                    }
-                    style={{
-                      width: mainWidth < 760 ? "100%" : `${e.ratio * 100}%`,
-                    }}
-                  >
-                    <DocumentReader id={e.companionId!} tabId={e.id} />
-                  </div>
-                ),
-            )}
-          {companionVisible && mainWidth >= 760 && (
-            <div
-              role="separator"
-              aria-label={t("Resize reader")}
-              aria-valuenow={Math.round(ratio * 100)}
-              aria-valuemin={25}
-              aria-valuemax={65}
-              tabIndex={0}
-              className="reader-divider"
-              style={{ left: `${(1 - ratio) * 100}%` }}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                  e.preventDefault();
+            {entries
+              .filter((e) => e.kind === "document")
+              .map((e) => (
+                <div
+                  key={`reader-${e.id}`}
+                  className={
+                    e.id === activeId
+                      ? "absolute inset-0 reader-surface"
+                      : "hidden"
+                  }
+                >
+                  <DocumentReader id={e.id} />
+                </div>
+              ))}
+            {entries
+              .filter((e) => e.kind === "terminal" && e.companionId)
+              .map(
+                (e) =>
+                  e.kind === "terminal" && (
+                    <div
+                      key={`companion-${e.id}`}
+                      className={
+                        e.id === activeId && companionVisible
+                          ? "absolute inset-y-0 right-0 reader-surface"
+                          : "hidden"
+                      }
+                      style={{
+                        width: mainWidth < 760 ? "100%" : `${e.ratio * 100}%`,
+                      }}
+                    >
+                      <DocumentReader id={e.companionId!} tabId={e.id} />
+                    </div>
+                  ),
+              )}
+            {companionVisible && mainWidth >= 760 && (
+              <div
+                role="separator"
+                aria-label={t("Resize reader")}
+                aria-valuenow={Math.round(ratio * 100)}
+                aria-valuemin={25}
+                aria-valuemax={65}
+                tabIndex={0}
+                className="reader-divider"
+                style={{ left: `${(1 - ratio) * 100}%` }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                    e.preventDefault();
+                    useWorkspaceStore
+                      .getState()
+                      .setRatio(
+                        activeId!,
+                        ratio + (e.key === "ArrowLeft" ? 0.03 : -0.03),
+                      );
+                  }
+                }}
+                onPointerDown={startDrag}
+                onPointerMove={(e) => {
+                  if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                  const rect = mainRef.current!.getBoundingClientRect();
                   useWorkspaceStore
                     .getState()
                     .setRatio(
                       activeId!,
-                      ratio + (e.key === "ArrowLeft" ? 0.03 : -0.03),
+                      1 - (e.clientX - rect.left) / rect.width,
                     );
+                }}
+                onPointerUp={(e) =>
+                  e.currentTarget.releasePointerCapture(e.pointerId)
                 }
-              }}
-              onPointerDown={startDrag}
-              onPointerMove={(e) => {
-                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-                const rect = mainRef.current!.getBoundingClientRect();
-                useWorkspaceStore
-                  .getState()
-                  .setRatio(
-                    activeId!,
-                    1 - (e.clientX - rect.left) / rect.width,
-                  );
-              }}
-              onPointerUp={(e) =>
-                e.currentTarget.releasePointerCapture(e.pointerId)
-              }
-            />
-          )}
-          {companion && !companionVisible && entry?.kind === "terminal" && (
-            <button
-              className="reader-reopen"
-              onClick={() =>
-                useWorkspaceStore.getState().focusDocument(companion, entry.id)
-              }
-            >
-              {t("Read beside terminal")} ↗
-            </button>
-          )}
-          {notice && (
-            <div role="alert" className="workspace-notice">
-              {t(notice.replace(/^Error: /, ""))}
+              />
+            )}
+            {companion && !companionVisible && entry?.kind === "terminal" && (
               <button
-                aria-label={t("Close")}
-                onClick={() => useWorkspaceStore.getState().setNotice(null)}
+                className="reader-reopen"
+                onClick={() =>
+                  useWorkspaceStore.getState().focusDocument(companion, entry.id)
+                }
               >
-                ×
+                {t("Read beside terminal")} ↗
               </button>
-            </div>
-          )}
-        </main>
+            )}
+            {notice && (
+              <div role="alert" className="workspace-notice">
+                {t(notice.replace(/^Error: /, ""))}
+                <button
+                  aria-label={t("Close")}
+                  onClick={() => useWorkspaceStore.getState().setNotice(null)}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </main>
+        </div>
       </div>
 
       <DropOverlay />

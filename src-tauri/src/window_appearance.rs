@@ -3,7 +3,7 @@
 //! Tauri 2.11.3's `windowEffects` wrapper calls window-vibrancy but discards
 //! its return values, so apply/clear failures would be invisible and the
 //! frontend could not fall back to a solid surface. This module calls
-//! window-vibrancy 0.6 directly on the main thread and reports the real
+//! window-vibrancy on macOS and checked Windows API calls on the main thread. It reports the real
 //! outcome. The frontend treats `effectiveMode: "solid"` as "paint opaque".
 
 use serde::Serialize;
@@ -53,7 +53,7 @@ impl AppearanceOutcome {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_window_appearance(
     app: AppHandle,
     mode: String,
@@ -95,70 +95,73 @@ mod platform {
         // an effective glass surface (the frontend tint stays translucent),
         // just with no material behind it.
         let want_layer = mode == "glass" && blur;
-        // Idempotence: repeating the state already on the window is a no-op,
-        // so retries after success never stack a second native layer.
-        {
-            let applied = GLASS_APPLIED.lock().unwrap();
-            if want_layer == *applied {
-                return match (mode, want_layer) {
-                    ("glass", true) => AppearanceOutcome::ok(mode, "glass", MATERIAL, "applied"),
-                    ("glass", false) => AppearanceOutcome::ok(mode, "glass", "none", "applied"),
-                    _ => AppearanceOutcome::ok(mode, "solid", "none", "cleared"),
-                };
-            }
-        }
-
         let Some(window) = app.get_webview_window("main") else {
             return AppearanceOutcome::failed(mode, "none", "apply-failed", "main-window-missing");
         };
-
-        // window-vibrancy's macOS path requires MainThreadMarker; run both
-        // platforms on the UI thread for a uniform contract. Tauri commands
-        // run off the main thread, so the blocking recv cannot deadlock.
+        let requested = mode.to_string();
         let (tx, rx) = std::sync::mpsc::channel();
+        // Check and mutate native state in the same UI-thread operation. The
+        // command runs on Tauri's async thread pool, so waiting here leaves
+        // the event loop free to run this closure.
         if app
             .run_on_main_thread(move || {
-                let result = if want_layer {
-                    apply_glass(&window)
+                let mut applied = GLASS_APPLIED.lock().unwrap();
+                let outcome = if want_layer == *applied {
+                    settled(&requested, want_layer)
                 } else {
-                    clear_glass(&window)
+                    let result = if want_layer {
+                        apply_glass(&window)
+                    } else {
+                        clear_glass(&window)
+                    };
+                    match result {
+                        Ok(()) => {
+                            *applied = want_layer;
+                            settled(&requested, want_layer)
+                        }
+                        Err(e) => AppearanceOutcome::failed(
+                            &requested,
+                            if *applied { MATERIAL } else { "none" },
+                            if e == "platform-unsupported" {
+                                "unsupported"
+                            } else if want_layer {
+                                "apply-failed"
+                            } else {
+                                "clear-failed"
+                            },
+                            e,
+                        ),
+                    }
                 };
-                let _ = tx.send(result);
+                let _ = tx.send(outcome);
             })
             .is_err()
         {
             return AppearanceOutcome::failed(mode, "none", "apply-failed", "main-thread-busy");
         }
-        let result = rx
-            .recv()
-            .unwrap_or_else(|_| Err("main-thread-dropped".to_string()));
+        rx.recv().unwrap_or_else(|_| {
+            AppearanceOutcome::failed(mode, "none", "apply-failed", "main-thread-dropped")
+        })
+    }
 
-        match (want_layer, result) {
-            (true, Ok(())) => {
-                *GLASS_APPLIED.lock().unwrap() = true;
-                AppearanceOutcome::ok(mode, "glass", MATERIAL, "applied")
-            }
-            (true, Err(e)) => AppearanceOutcome::failed(mode, "none", "apply-failed", e),
-            (false, Ok(())) => {
-                *GLASS_APPLIED.lock().unwrap() = false;
-                if mode == "glass" {
-                    AppearanceOutcome::ok(mode, "glass", "none", "applied")
-                } else {
-                    AppearanceOutcome::ok(mode, "solid", "none", "cleared")
-                }
-            }
-            // Cleanup failed: the native layer may still be there. Keep the
-            // applied flag so the next clear request retries the clear, and
-            // tell the frontend to cover it with an opaque surface.
-            (false, Err(e)) => AppearanceOutcome::failed(mode, MATERIAL, "clear-failed", e),
-        }
+    fn settled(mode: &str, layer: bool) -> AppearanceOutcome {
+        AppearanceOutcome::ok(
+            mode,
+            mode,
+            if layer { MATERIAL } else { "none" },
+            if mode == "glass" {
+                "applied"
+            } else {
+                "cleared"
+            },
+        )
     }
 
     #[cfg(target_os = "macos")]
     fn apply_glass(window: &WebviewWindow) -> Result<(), String> {
         // Clear first: apply_vibrancy adds a subview every call, and a
         // previously half-failed state must not stack a second one.
-        let _ = window_vibrancy::clear_vibrancy(window);
+        window_vibrancy::clear_vibrancy(window).map_err(|e| e.to_string())?;
         window_vibrancy::apply_vibrancy(
             window,
             window_vibrancy::NSVisualEffectMaterial::UnderWindowBackground,
@@ -180,12 +183,12 @@ mod platform {
     fn apply_glass(window: &WebviewWindow) -> Result<(), String> {
         // No tint color: the frontend's own translucent surface provides it,
         // so one opacity setting drives the whole window.
-        window_vibrancy::apply_acrylic(window, None).map_err(|e| e.to_string())
+        super::windows::set_acrylic(window.hwnd().map_err(|e| e.to_string())?.0, true)
     }
 
     #[cfg(target_os = "windows")]
     fn clear_glass(window: &WebviewWindow) -> Result<(), String> {
-        window_vibrancy::clear_acrylic(window).map_err(|e| e.to_string())
+        super::windows::set_acrylic(window.hwnd().map_err(|e| e.to_string())?.0, false)
     }
 }
 
@@ -203,3 +206,11 @@ mod platform {
         }
     }
 }
+
+#[cfg(target_os = "windows")]
+mod windows;
+
+// Test the actual result policy on macOS too; Windows visual acceptance
+// remains separate from failure-code mapping.
+#[cfg(any(target_os = "windows", test))]
+mod windows_status;

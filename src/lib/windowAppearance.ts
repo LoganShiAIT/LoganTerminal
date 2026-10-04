@@ -47,7 +47,7 @@ export const NATIVE_TIMEOUT_MS = 3000;
 
 /**
  * The async boundary, injectable for tests. Returning null means "no usable
- * answer" — timeout or IPC failure — which the coordinator treats as a solid
+ * answer" — IPC failure — which the coordinator treats as a solid
  * fallback without forgetting the requested target. `blur` selects whether
  * glass carries the native frost or shows the desktop unblurred.
  */
@@ -79,6 +79,7 @@ export function createAppearanceCoordinator(
   let targetSeq = 0;
   let processedSeq = 0;
   let running = false;
+  let replayedSeq = -1;
 
   const runLoop = async () => {
     running = true;
@@ -87,15 +88,37 @@ export function createAppearanceCoordinator(
         const seq = targetSeq;
         const target = desired;
         onState({ effectiveMode: current.effectiveMode, material: current.material, status: "pending" });
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          current = { effectiveMode: "solid", material: current.material, status: "timeout" };
+          onState(current);
+        }, NATIVE_TIMEOUT_MS);
         let outcome: NativeOutcome | null = null;
         try {
+          // Keep ownership of the real IPC promise after the UI timeout.
+          // Another native call must not start while this one can still mutate
+          // the window. New targets/retries accumulate in targetSeq meanwhile.
           outcome = await apply(target.mode, target.blur);
         } catch {
           outcome = null;
+        } finally {
+          clearTimeout(timer);
         }
         // A newer request arrived while this one was in flight; drop the
         // stale result entirely and let the loop pick up the latest target.
         if (seq < targetSeq) continue;
+        if (timedOut) {
+          // A late result never paints tokens. Reconcile the latest target
+          // with a fresh call, once per request, rather than retry forever
+          // when a native service consistently exceeds the deadline.
+          if (replayedSeq !== seq) {
+            replayedSeq = seq;
+            continue;
+          }
+          processedSeq = seq;
+          continue;
+        }
         processedSeq = seq;
         current = toState(outcome);
         onState(current);
@@ -125,8 +148,7 @@ export function createAppearanceCoordinator(
 
 function toState(outcome: NativeOutcome | null): AppearanceState {
   if (!outcome) {
-    // Timeout / IPC failure: keep the window usable on opaque surfaces.
-    return { effectiveMode: "solid", material: "none", status: "timeout" };
+    return { effectiveMode: "solid", material: "none", status: "apply-failed" };
   }
   if (outcome.status === "applied" || outcome.status === "cleared") {
     return {
@@ -156,7 +178,7 @@ function isTauriRuntime(): boolean {
   );
 }
 
-/** Default native bridge: Tauri command with a bounded wait. */
+/** Raw native bridge. The coordinator bounds UI waiting without losing IPC. */
 async function invokeNative(
   mode: WindowMaterial,
   blur: boolean,
@@ -171,18 +193,10 @@ async function invokeNative(
       reason: "browser-preview",
     };
   }
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
-      invoke<NativeOutcome>("apply_window_appearance", { mode, blur }),
-      new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), NATIVE_TIMEOUT_MS);
-      }),
-    ]);
+    return await invoke<NativeOutcome>("apply_window_appearance", { mode, blur });
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

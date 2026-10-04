@@ -393,6 +393,10 @@ const ZH: Record<string, string> = {
   Glass: "玻璃",
   "Background opacity": "背景不透明度",
   "Applying…": "应用中…",
+  "The background effect couldn't be removed — showing a solid background. Select the current material again to retry.":
+    "背景效果清理失败——已显示实色背景。再次选择当前材质可重试。",
+  "The solid background is active, but the window effect couldn't be confirmed. Select Solid again to retry.":
+    "已显示实色背景，但未能确认窗口效果状态。再次选择“实色”可重试。",
   "Blurs the desktop behind the window (macOS Vibrancy / Windows Acrylic)":
     "模糊窗口后面的桌面（macOS Vibrancy / Windows Acrylic）",
   "Native glass is unavailable in this environment — showing a solid background.":

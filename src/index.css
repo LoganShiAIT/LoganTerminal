@@ -350,7 +350,8 @@ html[data-material="glass"] .orb-c {
 /* The system blur behind the window replaces the per-region backdrop blur,
    and the shell tint is drawn once per region from the surface token. */
 html[data-material="glass"] .app-header,
-html[data-material="glass"] .app-sidebar {
+html[data-material="glass"] .app-sidebar,
+html[data-material="glass"] .sidebar-resize-handle {
   background: var(--surface-shell);
   backdrop-filter: none;
 }
@@ -619,7 +620,19 @@ html[data-material="glass"] .workspace-main {
 }
 
 /* A quiet workspace frame; reader colors are deliberately local. */
-.workspace-main { margin: 6px 6px 6px 0; border: var(--panel-border); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow); overflow: hidden; }
+.workspace-frame { position: relative; padding: 6px 6px 6px 0; overflow: hidden; }
+/* Paint only the ring outside the rounded workspace. A spread shadow leaves
+   its own box empty, so terminal/reader surfaces never get a second tint. */
+html[data-material="glass"] .workspace-frame::before {
+  content: "";
+  position: absolute;
+  /* Exclude the content box; the ring also paints under the 1px border. */
+  inset: 7px 7px 7px 1px;
+  border-radius: calc(var(--panel-radius) - 1px);
+  box-shadow: 0 0 0 100vmax var(--surface-shell);
+  pointer-events: none;
+}
+.workspace-main { border: var(--panel-border); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow); overflow: hidden; }
 .terminal-surface { background: var(--surface-terminal); }
 /* xterm.css hardcodes .xterm-viewport to #000 ("so the OS X scroll bar appears
    fully opaque") and xterm 6 puts its theme-background override inline on

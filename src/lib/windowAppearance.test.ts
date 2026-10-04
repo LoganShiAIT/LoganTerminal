@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAppearanceCoordinator,
   type AppearanceState,
@@ -28,6 +28,7 @@ async function settle(rounds = 20) {
 }
 
 describe("appearance coordinator", () => {
+  afterEach(() => vi.useRealTimers());
   it("applies a single request and reports the native result", async () => {
     const { states, onState } = collect();
     const apply = vi.fn(async (m: WindowMaterial) => ok(m));
@@ -66,22 +67,104 @@ describe("appearance coordinator", () => {
     expect(finals.some((s) => s.effectiveMode === "glass")).toBe(false);
   });
 
-  it("times out to a usable solid surface and ignores the late response", async () => {
+  it("keeps native calls serial after timeout and applies the latest target", async () => {
+    vi.useFakeTimers();
     const { states, onState } = collect();
-    // Simulates invokeNative resolving null after NATIVE_TIMEOUT_MS.
-    const apply = vi.fn(async (_m: WindowMaterial) => null);
+    let release!: (o: NativeOutcome) => void;
+    const apply = vi.fn((m: WindowMaterial) => m === "glass"
+      ? new Promise<NativeOutcome>(r => { release = r; })
+      : Promise.resolve(ok(m)));
+    const c = createAppearanceCoordinator(apply, onState);
+    c.request("glass", true);
+    await vi.advanceTimersByTimeAsync(3001);
+    expect(states[states.length - 1]?.status).toBe("timeout");
+    c.request("solid", true);
+    expect(apply).toHaveBeenCalledTimes(1);
+    release(ok("glass"));
+    await settle();
+    expect(apply).toHaveBeenLastCalledWith("solid", true);
+    expect(states[states.length - 1]).toEqual({ effectiveMode: "solid", material: "none", status: "ok" });
+    expect(states.some(s => s.effectiveMode === "glass")).toBe(false);
+  });
+
+  it("reconciles a late result with a fresh call without painting the stale result", async () => {
+    vi.useFakeTimers();
+    const { states, onState } = collect();
+    const releases: Array<(o: NativeOutcome) => void> = [];
+    const apply = vi.fn(() => new Promise<NativeOutcome>(r => releases.push(r)));
+    const c = createAppearanceCoordinator(apply, onState);
+    c.request("glass", true);
+    await vi.advanceTimersByTimeAsync(3001);
+    releases[0](ok("glass"));
+    await settle();
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(states[states.length - 1]?.effectiveMode).toBe("solid");
+    releases[1](ok("glass"));
+    await settle();
+    expect(states[states.length - 1]).toEqual({ effectiveMode: "glass", material: "vibrancy", status: "ok" });
+  });
+
+  it("bounds automatic late reconciliation and keeps manual retry available", async () => {
+    vi.useFakeTimers();
+    const { states, onState } = collect();
+    const releases: Array<(o: NativeOutcome) => void> = [];
+    const apply = vi.fn(() => new Promise<NativeOutcome>(r => releases.push(r)));
+    const c = createAppearanceCoordinator(apply, onState);
+    c.request("glass", true);
+    await vi.advanceTimersByTimeAsync(3001);
+    releases[0](ok("glass"));
+    await settle();
+    await vi.advanceTimersByTimeAsync(3001);
+    releases[1](ok("glass"));
+    await settle();
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(states[states.length - 1]?.status).toBe("timeout");
+    c.request("glass", true);
+    releases[2](ok("glass"));
+    await settle();
+    expect(states[states.length - 1]?.effectiveMode).toBe("glass");
+  });
+
+  it("treats IPC rejection as failure rather than timeout and permits retry", async () => {
+    const { states, onState } = collect();
+    const apply = vi.fn().mockRejectedValueOnce(new Error("IPC failed"))
+      .mockResolvedValueOnce(ok("glass"));
     const c = createAppearanceCoordinator(apply, onState);
     c.request("glass", true);
     await settle();
-    expect(states[states.length - 1]).toEqual({
-      effectiveMode: "solid",
-      material: "none",
-      status: "timeout",
-    });
-    // Manual retry re-runs the native request for the same preference.
+    expect(states[states.length - 1]?.status).toBe("apply-failed");
     c.request("glass", true);
     await settle();
-    expect(apply).toHaveBeenCalledTimes(2);
+    expect(states[states.length - 1]?.effectiveMode).toBe("glass");
+  });
+
+  it("reconciles a blur-only request queued behind a timed-out operation", async () => {
+    vi.useFakeTimers();
+    const { states, onState } = collect();
+    let release!: (o: NativeOutcome) => void;
+    const apply = vi.fn().mockImplementationOnce(() => new Promise<NativeOutcome>(r => { release = r; }))
+      .mockResolvedValueOnce(ok("glass", "none"));
+    const c = createAppearanceCoordinator(apply, onState);
+    c.request("glass", true);
+    await vi.advanceTimersByTimeAsync(3001);
+    c.request("glass", false);
+    expect(apply).toHaveBeenCalledTimes(1);
+    release(ok("glass"));
+    await settle();
+    expect(apply).toHaveBeenLastCalledWith("glass", false);
+    expect(states[states.length - 1]).toEqual({ effectiveMode: "glass", material: "none", status: "ok" });
+  });
+
+  it("keeps the opaque fallback and reports a failed native cleanup", async () => {
+    const { states, onState } = collect();
+    const apply = vi.fn().mockResolvedValueOnce(ok("glass"))
+      .mockResolvedValueOnce({ requestedMode: "solid", effectiveMode: "solid", material: "vibrancy", status: "clear-failed", reason: "failed" });
+    const c = createAppearanceCoordinator(apply, onState);
+    c.request("glass", true);
+    await settle();
+    c.request("solid", true);
+    await settle();
+    expect(states[states.length - 1]).toEqual({ effectiveMode: "solid", material: "vibrancy", status: "clear-failed" });
   });
 
   it("falls back to solid with a readable status when the native apply fails", async () => {

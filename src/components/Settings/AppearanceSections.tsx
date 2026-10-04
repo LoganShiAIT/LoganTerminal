@@ -352,25 +352,25 @@ export function WindowMaterialSection() {
   const status = useAppearanceStore((s) => s.status);
 
   const pick = (mode: WindowMaterial) => {
-    setMaterial(mode);
-    // Re-picking the saved mode is the manual retry after a failure.
-    retryWindowMaterial();
+    // A changed preference already triggers the coordinator subscription.
+    if (mode === material) retryWindowMaterial();
+    else setMaterial(mode);
   };
 
   const percent = Math.round(opacity * 100);
   const sliderDisabled = effectiveMode === "solid";
-  const statusText =
-    status === "pending"
-      ? t("Applying…")
-      : material === "glass" && effectiveMode === "solid"
-        ? status === "unsupported"
-          ? t(
-              "Native glass is unavailable in this environment — showing a solid background.",
-            )
-          : t(
-              "Glass couldn't be applied — showing a solid background. Select Glass again to retry.",
-            )
-        : null;
+  let statusText: string | null = null;
+  if (status === "pending") {
+    statusText = t("Applying…");
+  } else if (status === "clear-failed") {
+    statusText = t("The background effect couldn't be removed — showing a solid background. Select the current material again to retry.");
+  } else if (material === "solid" && status !== "ok") {
+    statusText = t("The solid background is active, but the window effect couldn't be confirmed. Select Solid again to retry.");
+  } else if (material === "glass" && effectiveMode === "solid") {
+    statusText = status === "unsupported"
+      ? t("Native glass is unavailable in this environment — showing a solid background.")
+      : t("Glass couldn't be applied — showing a solid background. Select Glass again to retry.");
+  }
 
   return (
     <Section label={t("Window material")}>
@@ -420,7 +420,7 @@ export function WindowMaterialSection() {
         />
       </div>
       {statusText && (
-        <div className="mt-1.5">
+        <div className="mt-1.5" role="status" aria-live="polite">
           <Hint>{statusText}</Hint>
         </div>
       )}

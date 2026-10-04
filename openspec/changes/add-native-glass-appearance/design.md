@@ -36,7 +36,7 @@ Pebrel 的参考版本为 `9dd3d6491bfaaf902a4a3a248c02f36a47abae2d`。参考点
 
 新增独立 window_appearance 模块，暴露针对主窗口的 apply_window_appearance 命令。请求包含 mode（solid/glass）和 blur（缺省视为开启）；glass 且 blur 关闭时不使用原生材质——清除已有原生层，返回 effectiveMode=glass、material=none，前端着色仍然生效，窗口纯透明。返回 requestedMode、effectiveMode、material（none/vibrancy/acrylic）及状态、简短原因。无效 mode 返回参数错误，保留既有有效状态。
 
-在 macOS/Windows 的平台依赖中直接声明与当前 Tauri 兼容的 window-vibrancy 0.6，由一个适配层负责应用和清理，避免同时配置静态 windowEffects 和调用第二套运行时材质。原因是锁定版本的 Tauri 包装层丢弃底层错误；直接调用可得到应用/清理结果，不需要复制原生实现。后续若 Tauri 提供完整错误传播，可在保持命令契约的前提下替换适配层。
+macOS 平台依赖直接声明与当前 Tauri 兼容的 window-vibrancy 0.6；Windows 使用 windows-sys 0.59 与 windows-version 0.1，由一个适配层负责应用和清理，避免同时配置静态 windowEffects 和调用第二套运行时材质。原因是锁定版本的 Tauri 包装层丢弃底层错误；macOS 直接调用可得到应用/清理结果。Windows 的 window-vibrancy 0.6 也丢弃了底层 HRESULT/BOOL，改为独立小适配：Windows 11 22H2+ 检查 DwmSetWindowAttribute 返回值，Windows 10 1809+/早期 Windows 11 动态解析 SetWindowCompositionAttribute 并检查 BOOL，缺失 API 或失败码均传回前端。后续若 Tauri 提供完整错误传播，可在保持命令契约的前提下替换适配层。
 
 macOS 首选 NSVisualEffectMaterial::UnderWindowBackground，使用 BehindWindow 的系统模糊；保留系统对窗口激活和透明效果的处理。Windows 首选 Acrylic，不自动替换成视觉语义不同的 Mica。Linux 和普通浏览器预览使用实色回退。原生效果只在模式切换或初始化时应用，不跟随透明度滑块、终端输出或普通重新渲染。
 
@@ -58,9 +58,9 @@ settingsStore 持久化 windowMaterial（solid/glass）、backgroundOpacity（0.
 
 首次和升级时缺少新键均保持现有实色外观；用户选择玻璃后持久化。solid 模式背景一律不透明，但记住玻璃不透明度，回到 glass 时恢复。100% 允许作为玻璃模式的上限，底色会遮住系统材质，属于正确行为。
 
-运行时 effectiveMode、material 和失败状态单独保存，不写入偏好。不支持平台保留 glass 偏好及简短说明，但有效 token 使用 solid。设置面板只展示用户能理解的状态，不展示 HWND、API 名或异常堆栈。
+运行时 effectiveMode、material 和失败状态单独保存，不写入偏好。不支持平台保留 glass 偏好及简短说明，但有效 token 使用 solid。清理失败在 solid/glass 两种偏好下均显示可读状态并支持重选当前材质重试。材质按钮暴露 aria-pressed，模糊开关暴露 switch/aria-checked，状态变化由 polite live region 宣告。设置面板只展示用户能理解的状态，不展示 HWND、API 名或异常堆栈。
 
-材质切换经单一协调器串行执行；UI 在请求完成前保留上一生效外观，后续请求覆盖待执行目标。前端用 revision 忽略过时结果，超时后收到旧结果仍不得改变 token，并将最新目标重新协调到原生状态，避免前后端不一致。组件卸载后取消订阅，协调器不依赖 SettingsPanel 挂载。
+材质切换经单一协调器串行执行，原生状态检查与更新在同一 UI 线程操作内完成，命令运行于 Tauri async 线程池；UI 在请求完成前保留上一生效外观，后续请求覆盖待执行目标。前端用 revision 忽略过时结果，超时后收到旧结果仍不得改变 token，并将最新目标重新协调到原生状态，避免前后端不一致。3 秒计时器只结束 UI 等待，不取消或丢失真实 IPC promise；旧调用结束前不发送新的原生操作。迟到结果不直接改变 token，协调最新目标；若目标未变，最多自动重放一次，连续超时保持实色并允许手动重试，避免无限循环。组件卸载后取消订阅，协调器不依赖 SettingsPanel 挂载。
 
 ### D4: 每个可见区域只绘制一次基础底色
 
@@ -73,7 +73,7 @@ flowchart LR
     C --> D[清晰的文字 图标 ANSI 色块]
 ```
 
-body、root、App 和 workspace-main 在玻璃生效时保持透明，不铺全窗口半透明 tint 再给子区域铺第二层。AppHeader、Sidebar、标签导航及外框缝隙在自己的区域绘制 shell 色；各终端 pane 在自己的区域绘制 terminal 色。实际挂载位置和圆角裁剪先核验，再明确 root 网格的独立装饰层，避免父子实色背景叠加。
+body、root、App 和 workspace-main 在玻璃生效时保持透明，不铺全窗口半透明 tint 再给子区域铺第二层。AppHeader、Sidebar、标签导航及外框缝隙在自己的区域绘制 shell 色；workspace-frame 使用裁剪的外扩阴影只填充工作区内容盒外侧（含边框及圆角空隙），侧栏 resize handle 自己绘制 shell 色；各终端 pane 在自己的区域绘制 terminal 色。实际挂载位置和圆角裁剪先核验，再明确 root 网格的独立装饰层，避免父子实色背景叠加。
 
 玻璃模式的 shell 和 terminal 基础 alpha 均为用户不透明度；边框、hover、选区作为局部反馈单独合成。solid 模式保持现有主题底色。不对包含内容的 DOM 容器设置整体 opacity，不对终端文字应用 blur/filter。细边框、约 10px 面板圆角与轻阴影使用统一 token，避免每个窗格重复大面积 backdrop blur。
 
