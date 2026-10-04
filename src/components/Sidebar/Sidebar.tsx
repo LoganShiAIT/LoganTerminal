@@ -28,7 +28,7 @@ export function Sidebar({
   const resizing = useUiStore((s) => s.sidebarResizing);
   return (
     <aside
-      className={`shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm ${
+      className={`app-sidebar shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm ${
         resizing
           ? ""
           : "transition-[width,opacity,border-width] duration-200 ease-out"

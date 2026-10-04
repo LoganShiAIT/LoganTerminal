@@ -45,10 +45,11 @@ export function Overlay({
       <div
         // A centered dialog scrolls its own body, so it must not also clip it
         // — the two overflow rules are mutually exclusive, never both.
-        className={`max-w-[92vw] rounded-2xl border border-edge bg-raise/95 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out] ${
+        // --surface-modal keeps the card at ≥92% opacity even in glass mode.
+        className={`max-w-[92vw] rounded-2xl border border-edge backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.55)] animate-[pop-in_0.14s_ease-out] ${
           align === "center" ? "max-h-[82vh] overflow-y-auto" : "overflow-hidden"
         }`}
-        style={{ width }}
+        style={{ width, background: "var(--surface-modal)" }}
       >
         {children}
       </div>

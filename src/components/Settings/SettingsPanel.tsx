@@ -11,6 +11,7 @@ import {
   FontSizeSection,
   CursorSection,
   EffectsSection,
+  WindowMaterialSection,
 } from "./AppearanceSections";
 import {
   NotificationsSection,
@@ -55,6 +56,7 @@ export default function SettingsPanel() {
       <div className="px-5 py-4 space-y-5">
         <LanguageSection />
         <ThemeSection />
+        <WindowMaterialSection />
         <ReaderAppearanceSection />
         <AccentSection />
         <FontSizeSection />

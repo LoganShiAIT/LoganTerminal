@@ -4,6 +4,7 @@ mod fs;
 mod git;
 mod pty;
 mod screenshots;
+mod window_appearance;
 
 use agents::AgentState;
 use clipboard::ClipboardHistory;
@@ -118,6 +119,7 @@ pub fn run() {
             clipboard::clipboard_remove,
             screenshots::screenshot_history,
             screenshots::screenshot_remove,
+            window_appearance::apply_window_appearance,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -62,17 +62,22 @@ export function ToggleRow({
   onToggle,
   label,
   title,
+  disabled = false,
 }: {
   checked: boolean;
   onToggle: () => void;
   label: ReactNode;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
-      className="flex items-center gap-2.5 group"
+      className={`flex items-center gap-2.5 group ${
+        disabled ? "opacity-30 pointer-events-none" : ""
+      }`}
       onClick={onToggle}
       title={title}
+      disabled={disabled}
     >
       <span
         className={`w-8 h-[18px] rounded-full p-[2px] transition-colors ${

@@ -20,7 +20,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 url = "2"
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
@@ -39,4 +39,12 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 # Workaround: cookie 0.18.1 (transitive dep via tauri/wry) breaks with time 0.3.52+.
 # Pin to a compatible version until cookie is updated upstream.
 time = "=0.3.51"
+
+# Native window material (Vibrancy / Acrylic). Called directly instead of
+# Tauri's windowEffects wrapper, which discards the underlying errors.
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+window-vibrancy = "0.6"
 

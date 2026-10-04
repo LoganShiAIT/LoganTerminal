@@ -19,6 +19,20 @@
      applyAnimScale() in settingsStore.ts as 1/speed, so a 2× speed setting
      lands here as 0.5. Every duration below is written against it. */
   --anim-scale: 1;
+
+  /* Surface tokens — warm-dark fallbacks for first paint; the live values
+     come from applySurfaceTokens() in src/lib/surfacePolicy.ts. Each visible
+     region paints its base tint exactly once from these. */
+  --surface-shell: #14100d;
+  --surface-terminal: #14100d;
+  --surface-modal: #251c16;
+  --surface-reader: #14100d;
+
+  /* Unified panel dressing: radius, hairline border, and a light shadow that
+     only appears in glass mode (see the data-material overrides below). */
+  --panel-radius: 12px;
+  --panel-border: 1px solid var(--color-edge);
+  --panel-shadow: none;
 }
 
 html,
@@ -296,6 +310,56 @@ body {
   }
 }
 
+/* Glass mode (html[data-material="glass"], pushed by lib/windowAppearance):
+   the window itself is transparent and the native material sits behind it,
+   so the page clears its opaque layers and lets each region paint its single
+   base tint from the --surface-* tokens. The grid and glow orbs quiet down
+   so they don't fight the desktop showing through. */
+html[data-material="glass"] body,
+html[data-material="glass"] #root {
+  background-color: transparent;
+}
+
+html[data-material="glass"] #root {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-accent) 2%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-accent) 2%, transparent) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 0%,
+      color-mix(in srgb, var(--color-accent) 2%, transparent) 0%,
+      transparent 60%
+    );
+}
+
+html[data-material="glass"] .orb {
+  opacity: 0.045;
+}
+
+html[data-material="glass"] .orb-c {
+  opacity: 0.03;
+}
+
+/* The system blur behind the window replaces the per-region backdrop blur,
+   and the shell tint is drawn once per region from the surface token. */
+html[data-material="glass"] .app-header,
+html[data-material="glass"] .app-sidebar {
+  background: var(--surface-shell);
+  backdrop-filter: none;
+}
+
+html[data-material="glass"] .workspace-main {
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  background: transparent;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 32%, transparent);
 }
@@ -555,9 +619,17 @@ body {
 }
 
 /* A quiet workspace frame; reader colors are deliberately local. */
-.workspace-main { margin: 6px 6px 6px 0; border: 1px solid var(--color-edge); border-radius: 12px; overflow: hidden; }
-.terminal-surface { background: var(--color-panel); }
-.reader-surface { overflow: hidden; background: var(--color-panel); }
+.workspace-main { margin: 6px 6px 6px 0; border: var(--panel-border); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow); overflow: hidden; }
+.terminal-surface { background: var(--surface-terminal); }
+/* xterm.css hardcodes .xterm-viewport to #000 ("so the OS X scroll bar appears
+   fully opaque") and xterm 6 puts its theme-background override inline on
+   .xterm-scrollable-element instead. The viewport sits under the render canvas:
+   an opaque theme background hides the #000, but the transparent glass background
+   lets it show through and turns the whole pane black. The pane surface owns the
+   base tint in both modes, so the viewport stays transparent. The scrollbar is
+   drawn by the scrollable-element sliders and the global ::-webkit-scrollbar rules. */
+.terminal-surface .xterm .xterm-viewport { background-color: transparent; }
+.reader-surface { overflow: hidden; background: var(--surface-reader); }
 .tab-type { font: 10px ui-monospace, monospace; letter-spacing: -.06em; color: var(--color-accent); border: 1px solid var(--color-edge); border-radius: 4px; padding: 1px 3px; }
 .file-read-action { font: 11px ui-monospace, monospace; padding: 2px 4px; border-radius: 4px; color: var(--color-accent); }
 .file-read-action:hover { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }

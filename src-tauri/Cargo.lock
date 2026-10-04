@@ -2140,6 +2140,7 @@ dependencies = [
  "time",
  "url",
  "uuid",
+ "window-vibrancy",
 ]
 
 [[package]]
