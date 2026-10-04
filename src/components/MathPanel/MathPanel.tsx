@@ -1,3 +1,4 @@
+import { openDocumentSnapshot, workspaceCwd } from "../../lib/workspace";
 import { useState } from "react";
 import { useMathStore } from "../../stores/mathStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -40,7 +41,9 @@ export default function MathPanel() {
           <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-accent">
             {t("Math")}
           </div>
-          <div className="-mr-1 flex items-center gap-0.5">
+          <div className="-mr-1 flex flex-wrap items-center gap-0.5">
+            <HeaderButton label={t("Read document")} title={t("Read document")} onClick={() => openDocumentSnapshot(source,"scratch", t("Math scratch"), workspaceCwd())} />
+            <HeaderButton label={t("Read beside terminal")} title={t("Read beside terminal")} onClick={() => openDocumentSnapshot(source,"scratch", t("Math scratch"), workspaceCwd(), true)} />
             <HeaderButton
               label={t("From terminal")}
               title={t(

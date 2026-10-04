@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useDocumentStore } from "../../stores/documentStore";
 import { useEffect, useState, type CSSProperties } from "react";
 import {
   usePtyStore,
@@ -33,7 +35,12 @@ const CHIP =
 export default function StatusCluster() {
   const activeTab = useActiveTab();
   const pane = useActivePane();
+  const focus = useWorkspaceStore(s => s.focus);
+  const doc = useDocumentStore(s => focus?.kind === "document" ? s.documents[focus.documentId] : undefined);
+  const t = useT();
   const attnCount = usePtyStore((s) => attentionPanes(s.tabs).length);
+
+  if (focus?.kind === "document") return <div className="ml-auto text-[12px] text-muted truncate max-w-[180px]" title={doc?.path || doc?.baseDir || ""}>{doc?.loading ? t("Loading…") : doc?.error ? t("Read error") : t("Read-only")} · {doc?.title}</div>;
 
   return (
     <div className="ml-auto flex items-center gap-2.5 shrink-0">

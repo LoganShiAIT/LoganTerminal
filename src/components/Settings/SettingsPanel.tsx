@@ -6,6 +6,7 @@ import { Overlay } from "../Overlay/Overlay";
 import {
   LanguageSection,
   ThemeSection,
+  ReaderAppearanceSection,
   AccentSection,
   FontSizeSection,
   CursorSection,
@@ -54,6 +55,7 @@ export default function SettingsPanel() {
       <div className="px-5 py-4 space-y-5">
         <LanguageSection />
         <ThemeSection />
+        <ReaderAppearanceSection />
         <AccentSection />
         <FontSizeSection />
         <CursorSection />

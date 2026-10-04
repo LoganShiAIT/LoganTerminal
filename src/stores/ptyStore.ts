@@ -1,3 +1,6 @@
+import { readWorkspaceSnapshot } from "./workspaceSnapshot";
+import { useDocumentStore } from "./documentStore";
+import { useWorkspaceStore } from "./workspaceStore";
 import { create } from "zustand";
 import type { GitDirty } from "../lib/git";
 import { dirLabel } from "../lib/paths";
@@ -122,7 +125,7 @@ function withUnreadCleared(tabs: PtyTab[], activeId: string | null): PtyTab[] {
 
 const restoredTabs = loadSnapshotTabs();
 const initialTabs =
-  restoredTabs.length > 0 ? restoredTabs : [makeTab(makeLeaf())];
+  restoredTabs.length > 0 || readWorkspaceSnapshot() ? restoredTabs : [makeTab(makeLeaf())];
 
 export const usePtyStore = create<PtyStore>((set, get) => {
   const updatePane = (paneId: string, fn: (leaf: LeafPane) => LeafPane) =>
@@ -144,7 +147,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
 
   return {
     tabs: initialTabs,
-    activeTabId: initialTabs[0].id,
+    activeTabId: initialTabs[0]?.id ?? null,
     dropPaths: null,
 
     addTab: (initialCwd = null, initialCmd = null) => {
@@ -156,7 +159,9 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     addFleetTab: (panes, cmd) => {
       const tab = activeTab();
       const source = tab ? activeLeafOf(tab) : null;
-      const cwd = source ? (source.cwd ?? source.initialCwd) : null;
+      const focus = useWorkspaceStore.getState().focus;
+      const docCwd = focus?.kind === "document" ? useDocumentStore.getState().documents[focus.documentId]?.baseDir : null;
+      const cwd = docCwd ?? (source ? (source.cwd ?? source.initialCwd) : null);
       const startCmd = cmd?.trim() || null;
       const leaf = () => makeLeaf(cwd, startCmd);
       const pair = () => makeSplit("col", leaf(), leaf());
@@ -184,8 +189,10 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       });
     },
 
-    setActiveTab: (id) =>
-      set((s) => ({ activeTabId: id, tabs: withUnreadCleared(s.tabs, id) })),
+    setActiveTab: (id) => {
+      set((s) => ({ activeTabId: id, tabs: withUnreadCleared(s.tabs, id) }));
+      useWorkspaceStore.getState().focusTerminal(id);
+    },
 
     moveTab: (from, to) =>
       set((s) => {
@@ -217,6 +224,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     },
 
     splitPane: (dir, cwd, initialCmd = null) => {
+      if (useWorkspaceStore.getState().focus?.kind === "document") return;
       const tab = activeTab();
       if (!tab) return;
       if (collectLeaves(tab.root).length >= MAX_PANES_PER_TAB) return;
@@ -236,6 +244,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     },
 
     closeActivePane: () => {
+      if (useWorkspaceStore.getState().focus?.kind === "document") return;
       const tab = activeTab();
       if (!tab) return;
       if (tab.root.type === "leaf") {
@@ -262,7 +271,8 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       });
     },
 
-    setActivePane: (tabId, paneId) =>
+    setActivePane: (tabId, paneId) => {
+      useWorkspaceStore.getState().focusTerminal(tabId, paneId);
       updateTab(tabId, (t) => {
         const root = updateLeafIn(t.root, paneId, (l) =>
           l.unread || l.attention
@@ -271,9 +281,11 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         );
         if (t.activePaneId === paneId && root === t.root) return t;
         return { ...t, activePaneId: paneId, root };
-      }),
+      });
+    },
 
     cyclePane: (dir) => {
+      if (useWorkspaceStore.getState().focus?.kind === "document") return;
       const tab = activeTab();
       if (!tab) return;
       const leaves = collectLeaves(tab.root);
@@ -286,6 +298,7 @@ export const usePtyStore = create<PtyStore>((set, get) => {
     },
 
     toggleZoom: () => {
+      if (useWorkspaceStore.getState().focus?.kind === "document") return;
       const tab = activeTab();
       if (!tab || tab.root.type === "leaf") return;
       updateTab(tab.id, (t) => ({
@@ -371,7 +384,8 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       set((s) => {
         const tab = s.tabs.find((t) => t.id === tabId);
         if (!tab) return s;
-        const tabIsActive = tabId === s.activeTabId;
+        const focus = useWorkspaceStore.getState().focus;
+        const tabIsActive = tabId === s.activeTabId && (!focus || focus.kind === "terminal");
         // Both true: this exact pane is the one being watched right now.
         if (tabIsActive && paneId === tab.activePaneId) return s;
 
@@ -393,7 +407,8 @@ export const usePtyStore = create<PtyStore>((set, get) => {
         const tab = s.tabs.find((t) => t.id === tabId);
         if (!tab) return s;
         // Watched right now → nothing to flag (same rule as markUnread).
-        if (tabId === s.activeTabId && paneId === tab.activePaneId) return s;
+        const focus = useWorkspaceStore.getState().focus;
+        if (tabId === s.activeTabId && paneId === tab.activePaneId && (!focus || focus.kind === "terminal")) return s;
         const root = updateLeafIn(tab.root, paneId, (l) =>
           l.attention ? l : { ...l, attention: true },
         );
@@ -412,8 +427,10 @@ export const usePtyStore = create<PtyStore>((set, get) => {
       return true;
     },
 
-    toggleBroadcast: (tabId) =>
-      updateTab(tabId, (t) => ({ ...t, broadcast: !t.broadcast })),
+    toggleBroadcast: (tabId) => {
+      if (useWorkspaceStore.getState().focus?.kind === "document") return;
+      updateTab(tabId, (t) => ({ ...t, broadcast: !t.broadcast }));
+    },
 
     markPaneExited: (paneId) =>
       updatePane(paneId, (l) => ({ ...l, exited: true, busy: false })),

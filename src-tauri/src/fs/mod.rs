@@ -44,8 +44,30 @@ pub fn fs_stat_path(path: String) -> Result<FsPathInfo, String> {
 }
 
 #[tauri::command]
-pub fn fs_read_text_file(path: String) -> Result<String, String> {
-    files::read_text_file(Path::new(&path)).map_err(|e| e.to_string())
+pub async fn fs_read_text_file(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        files::read_text_file(Path::new(&path)).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn fs_canonical_path(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::canonicalize(path)
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn fs_resolve_image(target: String, base_dir: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || files::resolve_image(&target, base_dir.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

@@ -1,3 +1,7 @@
+import { openDocumentFile, openDocumentSnapshot } from "../../lib/workspace";
+import { parentOf } from "../../lib/paths";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getFocusedTerminalTarget } from "../../lib/workspace";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -39,7 +43,9 @@ export default function ReviewPanel() {
   const attachments = useReviewStore((s) => s.attachments);
   const selectedPath = useReviewStore((s) => s.selectedPath);
   const selectPath = useReviewStore((s) => s.selectPath);
-  const activeSessionId = useActivePane()?.sessionId ?? null;
+  const activePane = useActivePane();
+  const terminalFocus = useWorkspaceStore(s => s.focus?.kind === "terminal");
+  const activeSessionId = terminalFocus ? activePane?.sessionId ?? null : null;
 
   const [info, setInfo] = useState<FsPathInfo | null>(null);
   const [content, setContent] = useState("");
@@ -131,7 +137,14 @@ export default function ReviewPanel() {
   const insertPath = async () => {
     if (!activeSessionId || !selectedPath) return;
     const escaped = await shellEscapePath(selectedPath);
+    if (getFocusedTerminalTarget()?.sessionId !== activeSessionId) return;
     invoke("pty_write", { sessionId: activeSessionId, data: escaped + " " });
+  };
+
+  const read = (beside: boolean) => {
+    if (!selectedPath || state !== "ready") return;
+    if (dirty) openDocumentSnapshot(draft, "draft", selectedName, parentOf(selectedPath), beside, selectedPath);
+    else void openDocumentFile(selectedPath, beside);
   };
 
   const save = async () => {
@@ -209,6 +222,8 @@ export default function ReviewPanel() {
               )}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
+              <PanelButton disabled={state !== "ready"} onClick={() => read(false)}>{t("Read document")}</PanelButton>
+              <PanelButton disabled={state !== "ready"} onClick={() => read(true)}>{t("Read beside terminal")}</PanelButton>
               <PanelButton disabled={!selectedPath} onClick={() => selectedPath && openPath(selectedPath)}>
                 {t("Open")}
               </PanelButton>
@@ -238,7 +253,7 @@ export default function ReviewPanel() {
             // The draft, not the saved text: edits show up in the preview.
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               {draft.trim() ? (
-                <MarkdownPreview source={draft} />
+                <MarkdownPreview baseDir={selectedPath ? parentOf(selectedPath) : null} source={draft} />
               ) : (
                 <div className="text-[13px] text-faint">{t("empty")}</div>
               )}

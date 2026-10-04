@@ -109,6 +109,8 @@ pub fn run() {
             fs::fs_search,
             fs::fs_stat_path,
             fs::fs_read_text_file,
+            fs::fs_canonical_path,
+            fs::fs_resolve_image,
             fs::fs_write_text_file,
             fs::fs_home_dir,
             fs::paste_to_file,

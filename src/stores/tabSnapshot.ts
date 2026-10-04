@@ -1,3 +1,4 @@
+import { readWorkspaceSnapshot } from "./workspaceSnapshot";
 import {
   clampRatio,
   makeLeaf,
@@ -19,7 +20,7 @@ import {
  * auto-runs anything.
  */
 
-type PaneSnapshot =
+export type PaneSnapshot =
   | string
   | null
   | { dir: "row" | "col"; ratio: number; a: PaneSnapshot; b: PaneSnapshot };
@@ -29,7 +30,7 @@ const MAX_RESTORED_TABS = 9;
 /** Depth 3 caps a restored tab at 8 leaves = MAX_PANES_PER_TAB. */
 const MAX_RESTORE_DEPTH = 3;
 
-function serializeNode(node: PaneNode): PaneSnapshot {
+export function serializeNode(node: PaneNode): PaneSnapshot {
   if (node.type === "leaf") return node.cwd ?? node.initialCwd;
   return {
     dir: node.dir,
@@ -40,7 +41,7 @@ function serializeNode(node: PaneNode): PaneSnapshot {
 }
 
 /** Anything unrecognized (or too deep) degrades to a plain empty pane. */
-function deserializeNode(snap: unknown, depth: number): PaneNode {
+export function deserializeNode(snap: unknown, depth: number): PaneNode {
   if (typeof snap === "string") return makeLeaf(snap);
   if (
     snap !== null &&
@@ -64,7 +65,11 @@ function deserializeNode(snap: unknown, depth: number): PaneNode {
 
 export function loadSnapshotTabs(): PtyTab[] {
   try {
+    const workspace = readWorkspaceSnapshot();
     const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (workspace) {
+      return workspace.entries.filter(e => e.kind === "terminal").slice(0, 9).map(e => makeTab(deserializeNode(e.layout, 0)));
+    }
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];

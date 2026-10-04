@@ -5,6 +5,7 @@ export const MIN_FONT_SIZE = 9;
 export const MAX_FONT_SIZE = 32;
 export const DEFAULT_FONT_SIZE = 17;
 
+export type ReaderAppearance = "follow-theme" | "paper" | "dark";
 export type CursorStyle = "block" | "bar" | "underline";
 export type Locale = "zh" | "en";
 
@@ -87,6 +88,8 @@ function applyAnimScale(speed: number) {
 }
 
 interface SettingsStore {
+  readerAppearance: ReaderAppearance;
+  setReaderAppearance: (appearance: ReaderAppearance) => void;
   /** UI language. Terminal content is never touched by this. */
   locale: Locale;
   fontSize: number;
@@ -137,6 +140,8 @@ interface SettingsStore {
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  readerAppearance: (["paper", "dark"].includes(localStorage.getItem("logan.readerAppearance") || "") ? localStorage.getItem("logan.readerAppearance") : "follow-theme") as ReaderAppearance,
+  setReaderAppearance: readerAppearance => {localStorage.setItem("logan.readerAppearance", readerAppearance); set({readerAppearance});},
   locale: loadLocale(),
   fontSize: loadFontSize(),
   showHiddenFiles: localStorage.getItem(SHOW_HIDDEN_KEY) === "1",

@@ -1,5 +1,5 @@
 import katex from "katex";
-import { Marked, type Tokens } from "marked";
+import { Lexer, Marked, type Tokens } from "marked";
 
 /**
  * Markdown + LaTeX rendering for agent output.
@@ -80,18 +80,19 @@ export function tokenize(src: string): Chunk[] {
 
   let i = 0;
   while (i < src.length) {
-    const rest = src.slice(i);
-
-    // Fenced block: ```math renders, any other fence stays code.
-    const fence = /^```([^\n`]*)\n?/.exec(rest);
+    // Avoid slicing the entire remaining document for every character.
+    // WebKit copies these slices, making long prose quadratic to tokenize.
+    const fence = (src[i] === "`" || src[i] === "~")
+      ? /^(~{3,}|`{3,})([^\n]*)\n?/.exec(src.slice(i))
+      : null;
     if (fence) {
       const bodyStart = i + fence[0].length;
-      const end = closingIndex(src, bodyStart, "```");
+      const end = src.indexOf(fence[1], bodyStart);
       const stop = end === -1 ? src.length : end;
       const body = src.slice(bodyStart, stop);
-      const close = end === -1 ? src.length : end + 3;
+      const close = end === -1 ? src.length : end + fence[1].length;
       flush(i);
-      if (fence[1].trim().toLowerCase() === "math") {
+      if (fence[2].trim().toLowerCase() === "math") {
         chunks.push({ kind: "math", value: body.trim(), display: true, start: i, end: close });
       } else {
         chunks.push({ kind: "code", value: src.slice(i, close), start: i, end: close });
@@ -213,7 +214,7 @@ export function renderMath(value: string, display: boolean): string {
  * that the panel routes through the opener plugin — a real `<a href>` would
  * navigate the whole webview away from the app.
  */
-function makeMarked(): Marked {
+function makeMarked(model?: ParsedDocument): Marked {
   const marked = new Marked({ gfm: true, breaks: false });
   marked.use({
     renderer: {
@@ -229,12 +230,65 @@ function makeMarked(): Marked {
         )}">${label}</span>`;
       },
       image(token: Tokens.Image) {
-        // Remote images can't load under the app CSP anyway — show the alt.
-        return escapeHtml(token.text || token.href);
+        if (!model) return escapeHtml(token.text || token.href);
+        const id = `image-${model.images.length}`;
+        model.images.push({id, href: token.href, alt: token.text});
+        return `<span class="reader-image" data-image-id="${id}">${escapeHtml(token.text || token.href)}</span>`;
+      },
+      heading(token: Tokens.Heading) {
+        if (!model) return `<h${token.depth}>${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
+        const id = `heading-${model.headings.length}`;
+        model.headings.push({id, depth: token.depth, text: token.text.replace(PLACEHOLDER_RE, (_all, n) => model.math[Number(n)]?.value ?? "")});
+        return `<h${token.depth} id="${id}">${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
+      },
+      code(token: Tokens.Code) {
+        if (!model) return `<pre><code>${escapeHtml(token.text)}</code></pre>\n`;
+        const id = `code-${model.codes.length}`;
+        // Fenced bodies retain the final newline and all internal whitespace.
+        const fence = /^(?:`{3,}|~{3,})[^\n]*\n/.exec(token.raw);
+        const value = fence ? token.raw.slice(fence[0].length).replace(/(?:`{3,}|~{3,})[ \t]*(?:\n)?$/, "") : token.text;
+        model.codes.push({id, value});
+        return `<div class="reader-code"><button type="button" data-code-id="${id}" class="reader-copy">Copy code</button><pre><code>${escapeHtml(token.text)}</code></pre></div>\n`;
+      },
+      table(token: Tokens.Table) {
+        const cell = (c: Tokens.TableCell, tag: string) => `<${tag}>${this.parser.parseInline(c.tokens)}</${tag}>`;
+        const table = `<table><thead><tr>${token.header.map(c => cell(c, "th")).join("")}</tr></thead><tbody>${token.rows.map(row => `<tr>${row.map(c => cell(c,"td")).join("")}</tr>`).join("")}</tbody></table>`;
+        return model ? `<div class="reader-table">${table}</div>` : table;
       },
     },
   });
   return marked;
+}
+
+// JavaScriptCore's block regexes scan the remaining Unicode source on each
+// iteration. Bound that work at top-level heading boundaries while sharing one
+// lexer, reference-link table and inline queue for the entire document.
+function parseMarkdownSource(markdown: Marked, source: string): string {
+  if (source.length < 32768) return markdown.parse(source, { async: false }) as string;
+  const protectedCode = tokenize(source).filter(c => c.kind === "code");
+  // Raw HTML blocks stay literal as one block, including any apparent heading.
+  const htmlBlocks = /<!--[\s\S]*?(?:-->|$)|<(script|pre|style|textarea)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)|^ {0,3}<\/?[A-Za-z][^\n]*(?:\n(?![ \t]*\n)[^\n]*)*/gim;
+  const protectedBlocks: Span[] = [...protectedCode];
+  for (const match of source.matchAll(htmlBlocks)) {
+    const start = match.index!;
+    if (!protectedCode.some(c => c.start <= start && start < c.end))
+      protectedBlocks.push({ start, end: start + match[0].length });
+  }
+  protectedBlocks.sort((a, b) => a.start - b.start);
+  const boundaries = /\n(?=#{1,6}[ \t])/g;
+  const lexer = new Lexer(markdown.defaults);
+  let start = 0, codeIndex = 0;
+  for (const match of source.matchAll(boundaries)) {
+    const at = match.index! + 1;
+    while (protectedBlocks[codeIndex]?.end <= at) codeIndex++;
+    const code = protectedBlocks[codeIndex];
+    if (at - start < 16384 || (code && code.start <= at && at < code.end)) continue;
+    lexer.blockTokens(source.slice(start, at), lexer.tokens);
+    start = at;
+  }
+  lexer.blockTokens(source.slice(start), lexer.tokens);
+  lexer.lex(""); // resolve the shared inline queue after all reference definitions
+  return markdown.parser(lexer.tokens);
 }
 
 const marked = makeMarked();
@@ -254,7 +308,7 @@ export function renderMathMarkdown(src: string): string {
     }
   }
 
-  const html = marked.parse(staged, { async: false }) as string;
+  const html = parseMarkdownSource(marked, staged);
   return html.replace(
     PLACEHOLDER_RE,
     (_all, index: string) => rendered[Number(index)] ?? "",
@@ -264,4 +318,30 @@ export function renderMathMarkdown(src: string): string {
 /** True when the text carries something worth rendering. */
 export function hasMath(src: string): boolean {
   return tokenize(src).some((c) => c.kind === "math");
+}
+
+export interface ParsedDocument {
+  html: string;
+  headings: {id: string; depth: number; text: string}[];
+  codes: {id: string; value: string}[];
+  math: {id: string; value: string; display: boolean}[];
+  images: {id: string; href: string; alt: string}[];
+}
+/** One source revision supplies preview, outline and original copy payloads. */
+export function parseMarkdownDocument(source: string): ParsedDocument {
+  const model: ParsedDocument = {html: "", headings: [], codes: [], math: [], images: []};
+  let staged = "";
+  for (const chunk of tokenize(source)) {
+    if (chunk.kind !== "math") { staged += chunk.value; continue; }
+    const id = `math-${model.math.length}`;
+    staged += `${PLACEHOLDER}${model.math.length}END`;
+    model.math.push({id, value: chunk.value, display: chunk.display});
+  }
+  model.html = parseMarkdownSource(makeMarked(model), staged).replace(PLACEHOLDER_RE, (_all, n) => {
+    const math = model.math[Number(n)];
+    if (!math) return "";
+    const html = renderMath(math.value, math.display);
+    return math.display ? `<span class="reader-formula"><button type="button" data-math-id="${math.id}" class="reader-copy">Copy TeX</button>${html}</span>` : html;
+  });
+  return model;
 }

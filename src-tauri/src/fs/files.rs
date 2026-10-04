@@ -3,6 +3,7 @@
 //! only ever opens things it can actually render as text.
 
 use serde::Serialize;
+use std::io::Read;
 use std::path::Path;
 
 /// Above this a file is refused rather than loaded — the review panel is a
@@ -83,7 +84,16 @@ pub fn read_text_file(path: &Path) -> std::io::Result<String> {
         ));
     }
 
-    let bytes = std::fs::read(path)?;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(MAX_TEXT_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file is larger than 1MB",
+        ));
+    }
     if bytes.contains(&0) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -204,6 +214,114 @@ mod tests {
         write_text_file(&file, "changed").unwrap();
         assert_eq!(fs::read_to_string(&file).unwrap(), "changed");
 
+        fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+/// Local image URLs resolve against the document's captured directory.
+pub fn resolve_image(target: &str, base_dir: Option<&str>) -> Result<String, String> {
+    let path = if target.starts_with("file:") {
+        url::Url::parse(target)
+            .map_err(|e| e.to_string())?
+            .to_file_path()
+            .map_err(|_| "Invalid file URI")?
+    } else {
+        if target.contains("://") || target.starts_with("data:") {
+            return Err("Remote images are opened externally".into());
+        }
+        let local = std::path::Path::new(target);
+        let resolved = if local.is_absolute() {
+            std::path::PathBuf::from(local)
+        } else {
+            std::path::PathBuf::from(base_dir.ok_or("Relative image has no source directory")?)
+                .join(local)
+        };
+        if target.contains('%') {
+            let base = url::Url::from_directory_path(if local.is_absolute() {
+                std::path::Path::new("/")
+            } else {
+                std::path::Path::new(base_dir.ok_or("Relative image has no source directory")?)
+            })
+            .map_err(|_| "Invalid source directory")?;
+            base.join(target)
+                .map_err(|e| e.to_string())?
+                .to_file_path()
+                .map_err(|_| "Invalid image path")?
+        } else {
+            resolved
+        }
+    };
+    let canonical = path.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical.is_file() {
+        return Err("Image is not a file".into());
+    }
+    let ext = canonical
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif"
+    ) {
+        return Err("Unsupported image format".into());
+    }
+    Ok(canonical.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod reader_tests {
+    use super::*;
+    use std::fs;
+    #[test]
+    fn resolves_chinese_space_relative_uri_and_alias_images() {
+        let dir = std::env::temp_dir().join(format!("logan-reader-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join("报告")).unwrap();
+        fs::create_dir_all(dir.join("图 空格")).unwrap();
+        let image = dir.join("图 空格").join("矩阵.svg");
+        fs::write(&image, "<svg xmlns='http://www.w3.org/2000/svg'/>").unwrap();
+        let expected = image.canonicalize().unwrap().to_string_lossy().into_owned();
+        let base = dir.join("报告").to_string_lossy().into_owned();
+        assert_eq!(
+            resolve_image("../图 空格/矩阵.svg", Some(&base)).unwrap(),
+            expected
+        );
+        let uri = url::Url::from_file_path(&image).unwrap();
+        assert_eq!(resolve_image(uri.as_str(), None).unwrap(), expected);
+        assert_eq!(
+            resolve_image("../图%20空格/矩阵.svg", Some(&base)).unwrap(),
+            expected
+        );
+        assert!(resolve_image("../图 空格/矩阵.svg", None).is_err());
+        assert!(resolve_image("https://example.com/image.png", Some(&base)).is_err());
+        assert!(resolve_image("missing.png", Some(&base)).is_err());
+        #[cfg(unix)]
+        {
+            let alias = dir.join("alias.svg");
+            std::os::unix::fs::symlink(&image, &alias).unwrap();
+            assert_eq!(
+                resolve_image(alias.to_str().unwrap(), None).unwrap(),
+                expected
+            );
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn accepts_utf8_byte_boundary_and_rejects_invalid_text() {
+        let dir = std::env::temp_dir().join(format!("logan-reader-limit-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("中文 空格.md");
+        let text = "中".repeat((MAX_TEXT_FILE_BYTES / 3) as usize) + "a";
+        assert_eq!(text.len(), MAX_TEXT_FILE_BYTES as usize);
+        fs::write(&path, &text).unwrap();
+        assert_eq!(read_text_file(&path).unwrap().len(), text.len());
+        fs::write(&path, text + "b").unwrap();
+        assert!(read_text_file(&path).is_err());
+        fs::write(&path, [0xff, 0xfe]).unwrap();
+        assert!(read_text_file(&path)
+            .unwrap_err()
+            .to_string()
+            .contains("UTF-8"));
         fs::remove_dir_all(dir).unwrap();
     }
 }

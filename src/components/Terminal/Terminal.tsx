@@ -1,3 +1,5 @@
+import { getFocusedTerminalTarget, openDocumentSnapshot } from "../../lib/workspace";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -98,6 +100,13 @@ export default function Terminal({
     term.loadAddon(new Unicode11Addon());
     term.unicode.activeVersion = "11";
     term.open(container);
+    // Gate human keyboard/paste input, while allowing xterm protocol replies
+    // to continue servicing background terminal applications.
+    term.attachCustomKeyEventHandler(() => getFocusedTerminalTarget()?.id === paneId);
+    const gatePaste = (event: ClipboardEvent) => {
+      if (getFocusedTerminalTarget()?.id !== paneId) {event.preventDefault(); event.stopImmediatePropagation();}
+    };
+    container.addEventListener("paste", gatePaste, true);
     // GPU renderer; on context loss or unsupported WebGL2 xterm falls back
     // to the DOM renderer, so failures here are non-fatal.
     try {
@@ -227,7 +236,7 @@ export default function Terminal({
     // Chrome UI (command palette, header buttons) drives the active terminal
     // through the term bus rather than reaching into this component.
     const unsubTermCmd = onTermCmd((cmd) => {
-      if (!activeRef.current) return;
+      if (!activeRef.current || getFocusedTerminalTarget()?.id !== paneId) return;
       if (typeof cmd === "object") {
         // term.paste feeds onData like a real ⌘V: newlines normalized and,
         // when the running program enabled bracketed paste, wrapped in the
@@ -257,6 +266,16 @@ export default function Terminal({
         case "select-output":
           shell.selectLastOutput();
           break;
+        case "read-selection":
+        case "read-selection-beside": {
+          let text = term.getSelection();
+          let origin: "selection" | "output" = "selection";
+          if (!text.trim()) {term.clearSelection(); shell.selectLastOutput(); text = term.getSelection(); origin = "output";}
+          if (!text.trim()) {useWorkspaceStore.getState().setNotice("Select text and try again"); break;}
+          const leaf = getFocusedTerminalTarget();
+          openDocumentSnapshot(text, origin, origin === "selection" ? t("Terminal selection") : t("Last command output"), leaf?.cwd ?? leaf?.initialCwd ?? null, cmd === "read-selection-beside", null, paneId);
+          break;
+        }
         case "send-selection":
           sendSelectionToMath(term, shell.selectLastOutput);
           break;
@@ -264,7 +283,7 @@ export default function Terminal({
     });
 
     const onKey = (e: KeyboardEvent) => {
-      if (!activeRef.current || !hasAppMod(e)) return;
+      if (!activeRef.current || getFocusedTerminalTarget()?.id !== paneId || !hasAppMod(e)) return;
       const s = useSettingsStore.getState();
       if (e.key === "=" || e.key === "+") s.bumpFontSize(1);
       else if (e.key === "-" || e.key === "_") s.bumpFontSize(-1);
@@ -293,6 +312,7 @@ export default function Terminal({
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);
+      container.removeEventListener("paste", gatePaste, true);
       session.dispose();
       for (const d of disposables) d.dispose();
       math.dispose();

@@ -1,3 +1,8 @@
+import { openDocumentFile } from "../../lib/workspace";
+import { useDocumentStore } from "../../stores/documentStore";
+import { isMarkdownPath } from "../../lib/paths";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getFocusedTerminalTarget } from "../../lib/workspace";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useActivePane, usePtyStore } from "../../stores/ptyStore";
@@ -41,8 +46,11 @@ export default function FileTree() {
   const highlightRowRef = useRef<HTMLLIElement | null>(null);
   const activePane = useActivePane();
   const activePaneId = activePane?.id ?? null;
-  const activeSessionId = activePane?.sessionId ?? null;
-  const ptyCwd = activePane?.cwd ?? null;
+  const terminalFocus = useWorkspaceStore(s => s.focus?.kind === "terminal");
+  const activeSessionId = terminalFocus ? activePane?.sessionId ?? null : null;
+  const focus = useWorkspaceStore(s => s.focus);
+  const sourceDir = useDocumentStore(s => focus?.kind === "document" ? s.documents[focus.documentId]?.baseDir : null);
+  const ptyCwd = sourceDir ?? activePane?.cwd ?? null;
 
   useEffect(() => {
     (async () => {
@@ -94,6 +102,7 @@ export default function FileTree() {
     async (path: string) => {
       if (!activeSessionId) return;
       const escaped = await shellEscapePath(path);
+      if (getFocusedTerminalTarget()?.sessionId !== activeSessionId) return;
       invoke("pty_write", {
         sessionId: activeSessionId,
         data: escaped + " ",
@@ -216,6 +225,7 @@ export default function FileTree() {
               >
                 {e.name}
               </span>
+              {!e.is_dir && isMarkdownPath(full) && <button className="file-read-action" title={t("Read document")} aria-label={t("Read document")} onClick={event => {event.stopPropagation(); void openDocumentFile(full);}}>M↓</button>}
               {e.is_dir && (
                 <>
                   <button

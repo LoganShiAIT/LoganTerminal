@@ -1,6 +1,7 @@
+import { workspaceCwd } from "../../lib/workspace";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { usePtyStore, getActiveLeaf } from "../../stores/ptyStore";
+import { usePtyStore } from "../../stores/ptyStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import {
@@ -40,8 +41,8 @@ export default function WorktreeModal() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const cwdOf = () => {
-    const leaf = getActiveLeaf();
-    return leaf?.cwd ?? leaf?.initialCwd ?? null;
+    const cwd = workspaceCwd();
+    return cwd;
   };
 
   const refresh = async () => {

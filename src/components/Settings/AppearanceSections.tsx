@@ -317,3 +317,10 @@ function AnimSpeedRow() {
     </div>
   );
 }
+
+export function ReaderAppearanceSection() {
+  const t = useT();
+  const appearance = useSettingsStore(s => s.readerAppearance);
+  const set = useSettingsStore(s => s.setReaderAppearance);
+  return <Section label={t("Reader appearance")}><div className="flex gap-2 flex-wrap">{(["follow-theme", "paper", "dark"] as const).map(value => <ChoiceButton key={value} selected={appearance === value} onClick={() => set(value)}>{t(value === "paper" ? "Paper" : value === "dark" ? "Dark" : "Follow theme")}</ChoiceButton>)}</div></Section>;
+}

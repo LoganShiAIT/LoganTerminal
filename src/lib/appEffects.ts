@@ -1,7 +1,8 @@
+import { getFocusedTerminalTarget } from "./workspace";
 import { useEffect, useRef } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invoke } from "@tauri-apps/api/core";
-import { usePtyStore, getActiveLeaf, collectLeaves } from "../stores/ptyStore";
+import { usePtyStore, collectLeaves } from "../stores/ptyStore";
 import { shellEscapePaths } from "./shellEscape";
 import { attachReviewPaths } from "./reviewAttachments";
 import { sendTermCmd } from "./termBus";
@@ -58,7 +59,7 @@ export function useWindowFileDrop() {
     (async () => {
       unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
         const { setDropPaths } = usePtyStore.getState();
-        const sid = getActiveLeaf()?.sessionId;
+        const sid = getFocusedTerminalTarget()?.sessionId;
         const p = event.payload;
         if (p.type === "enter" || p.type === "over") {
           if ("paths" in p && p.paths && p.paths.length > 0) {
@@ -70,8 +71,10 @@ export function useWindowFileDrop() {
           setDropPaths(null);
           const paths = ("paths" in p && p.paths) || [];
           if (paths.length === 0) return;
-          if (shiftDown.current && sid) {
+          if (shiftDown.current) {
+            if (!sid) return;
             const escaped = await shellEscapePaths(paths);
+            if (getFocusedTerminalTarget()?.sessionId !== sid) return;
             invoke("pty_write", { sessionId: sid, data: escaped.join(" ") + " " });
             return;
           }

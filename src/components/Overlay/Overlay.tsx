@@ -7,7 +7,8 @@
  * body of selectable rows, and a hint footer. Keeping that in one place is
  * what stops five copies of the same class string from drifting apart.
  */
-import type { ReactNode, RefObject } from "react";
+import { useEffect, type ReactNode, type RefObject } from "react";
+import { restoreSurfaceFocus } from "../../lib/workspace";
 
 interface OverlayProps {
   /** Card width in px; it still shrinks on narrow windows. */
@@ -27,6 +28,7 @@ export function Overlay({
   onClose,
   children,
 }: OverlayProps) {
+  useEffect(() => () => restoreSurfaceFocus(), []);
   return (
     <div
       className={`fixed inset-0 z-50 flex justify-center backdrop-blur-[2px] animate-[fade-in_0.1s_ease-out] ${

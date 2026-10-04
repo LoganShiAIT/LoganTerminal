@@ -1,3 +1,6 @@
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useDocumentStore } from "../../stores/documentStore";
+import { activateWorkspace, closeWorkspace, workspaceCwd } from "../../lib/workspace";
 import { useLayoutEffect, useRef, useState } from "react";
 import { usePtyStore, collectLeaves, activeLeafOf } from "../../stores/ptyStore";
 import { dirLabel } from "../../lib/paths";
@@ -22,12 +25,14 @@ interface DragState {
 
 export default function TabBar() {
   const t = useT();
-  const tabs = usePtyStore((s) => s.tabs);
-  const activeTabId = usePtyStore((s) => s.activeTabId);
-  const setActiveTab = usePtyStore((s) => s.setActiveTab);
-  const closeTab = usePtyStore((s) => s.closeTab);
+  const terminals = usePtyStore((s) => s.tabs);
+  const tabs = useWorkspaceStore(s => s.entries);
+  const documents = useDocumentStore(s => s.documents);
+  const activeTabId = useWorkspaceStore(s => s.activeId);
+  const setActiveTab = activateWorkspace;
+  const closeTab = closeWorkspace;
   const addTab = usePtyStore((s) => s.addTab);
-  const moveTab = usePtyStore((s) => s.moveTab);
+  const moveTab = useWorkspaceStore(s => s.move);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const elsRef = useRef(new Map<string, HTMLDivElement>());
@@ -51,7 +56,7 @@ export default function TabBar() {
       if (!el) continue;
       const left = el.getBoundingClientRect().left;
       next.set(tab.id, left);
-      const old = prev.get(tab.id);
+      const old = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? undefined : prev.get(tab.id);
       if (old !== undefined && Math.abs(old - left) > 0.5) {
         el.animate(
           [{ transform: `translateX(${old - left}px)` }, { transform: "none" }],
@@ -165,9 +170,7 @@ export default function TabBar() {
   };
 
   const handleNewTab = () => {
-    const active = tabs.find((t) => t.id === activeTabId);
-    const leaf = active ? activeLeafOf(active) : null;
-    addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
+    addTab(workspaceCwd());
   };
 
   return (
@@ -179,13 +182,15 @@ export default function TabBar() {
       {tabs.map((tab, i) => {
         const isActive = tab.id === activeTabId;
         const isDragging = drag?.id === tab.id;
-        const leaves = collectLeaves(tab.root);
-        const activeLeaf = activeLeafOf(tab);
-        const labelCwd = activeLeaf.cwd ?? activeLeaf.initialCwd;
+        const terminal = terminals.find(t => t.id === tab.id);
+        const document = documents[tab.id];
+        const leaves = terminal ? collectLeaves(terminal.root) : [];
+        const activeLeaf = terminal ? activeLeafOf(terminal) : null;
+        const labelCwd = activeLeaf?.cwd ?? activeLeaf?.initialCwd ?? document?.path ?? document?.baseDir;
         // Shell/app-set title (OSC 0/2) wins over the cwd-derived label.
-        const label = activeLeaf.title || tabLabel(labelCwd);
+        const label = document?.title || activeLeaf?.title || tabLabel(labelCwd ?? null);
         const hasAgent = leaves.some((l) => l.agentName && !l.exited);
-        const allExited = leaves.every((l) => l.exited);
+        const allExited = leaves.length > 0 && leaves.every((l) => l.exited);
         return (
           <div
             key={tab.id}
@@ -202,6 +207,8 @@ export default function TabBar() {
               dragInfoRef.current = null;
               setDrag(null);
             }}
+            role="tab" aria-selected={isActive} tabIndex={0}
+            onKeyDown={e => {if (e.key === "Enter" || e.key === " ") {e.preventDefault();setActiveTab(tab.id);}}}
             onClick={() => {
               if (justDraggedRef.current) return;
               setActiveTab(tab.id);
@@ -231,6 +238,7 @@ export default function TabBar() {
                   : ""
             }`}
           >
+            <span className="tab-type" aria-label={t(tab.kind === "terminal" ? "Terminal" : document?.kind === "file" ? "Markdown file" : "Temporary snapshot")}>{tab.kind === "terminal" ? "›_" : document?.kind === "file" ? "M↓" : "▤"}</span>
             {hasAgent && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-accent shrink-0 animate-[dot-glow_1.8s_ease-in-out_infinite]"
@@ -239,7 +247,7 @@ export default function TabBar() {
                 })}
               />
             )}
-            {tab.unread && !isActive && (
+            {terminal?.unread && !isActive && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-ink/75 shrink-0"
                 title={t("New output")}
@@ -270,7 +278,7 @@ export default function TabBar() {
                   e.stopPropagation();
                   closeTab(tab.id);
                 }}
-                title={t("Close tab (all panes)")}
+                aria-label={t("Close current tab")} title={t("Close tab (all panes)")}
               >
                 ×
               </button>

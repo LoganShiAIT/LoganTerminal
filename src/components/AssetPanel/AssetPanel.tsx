@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { getFocusedTerminalTarget } from "../../lib/workspace";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
@@ -47,7 +49,9 @@ export default function AssetPanel() {
   const prependShot = useScreenshotStore((s) => s.prepend);
   const removeShot = useScreenshotStore((s) => s.remove);
 
-  const activeSessionId = useActivePane()?.sessionId ?? null;
+  const activePane = useActivePane();
+  const terminalFocus = useWorkspaceStore(s => s.focus?.kind === "terminal");
+  const activeSessionId = terminalFocus ? activePane?.sessionId ?? null : null;
   const [lightbox, setLightbox] = useState<LightboxData | null>(null);
 
   useEffect(() => {
@@ -79,6 +83,7 @@ export default function AssetPanel() {
   const writePath = async (path: string) => {
     if (!activeSessionId) return;
     const escaped = await shellEscapePath(path);
+    if (getFocusedTerminalTarget()?.sessionId !== activeSessionId) return;
     invoke("pty_write", {
       sessionId: activeSessionId,
       data: escaped + " ",
@@ -238,7 +243,7 @@ export default function AssetPanel() {
   );
 }
 
-function Lightbox({
+export function Lightbox({
   data,
   canInsert,
   onInsert,

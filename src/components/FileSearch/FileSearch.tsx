@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getActiveLeaf } from "../../stores/ptyStore";
+import { getFocusedTerminalTarget, workspaceCwd, openDocumentFile } from "../../lib/workspace";
+import { isMarkdownPath } from "../../lib/paths";
 import { useUiStore } from "../../stores/uiStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { shellEscapePath } from "../../lib/shellEscape";
@@ -97,9 +98,10 @@ export default function FileSearch() {
   const toShell = useCallback(
     async (data: (escaped: string) => string, target: string) => {
       close(true);
-      const sid = getActiveLeaf()?.sessionId;
+      const sid = getFocusedTerminalTarget()?.sessionId;
       if (!sid) return;
-      invoke("pty_write", { sessionId: sid, data: data(await shellEscapePath(target)) });
+      const escaped = await shellEscapePath(target);
+      if (getFocusedTerminalTarget()?.sessionId === sid) invoke("pty_write", {sessionId: sid, data: data(escaped)});
     },
     [close],
   );
@@ -137,8 +139,7 @@ export default function FileSearch() {
   // looking at — that is nearly always the project the user means.
   useEffect(() => {
     if (!open) return;
-    const leaf = getActiveLeaf();
-    const cwd = leaf?.cwd ?? leaf?.initialCwd ?? null;
+    const cwd = workspaceCwd();
     setRoot(cwd || home || "");
     setQuery("");
     setSelected(0);
@@ -285,6 +286,7 @@ export default function FileSearch() {
               </span>
             )}
             <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              {!hit.is_dir && isMarkdownPath(hit.path) && <RowButton label="M↓" title={t("Read document")} onClick={() => {close(false); void openDocumentFile(hit.path);}} />}
               <RowButton
                 label="⌘↵"
                 title={t("Insert path into the terminal")}

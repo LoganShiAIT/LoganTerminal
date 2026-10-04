@@ -1,4 +1,6 @@
-import { usePtyStore, getActiveLeaf } from "./stores/ptyStore";
+import { useWorkspaceStore } from "./stores/workspaceStore";
+import { workspaceCwd, cycleWorkspace, activateWorkspace, closeFocusedSurface, getFocusedTerminalTarget } from "./lib/workspace";
+import { usePtyStore } from "./stores/ptyStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
 import { sendTermCmd } from "./lib/termBus";
@@ -11,6 +13,7 @@ import type { Binding } from "./lib/keymap";
  * data-pane-id DOM rects; hidden tabs' panes have zero size and are skipped.
  */
 function focusDirectionalPane(dir: "left" | "right" | "up" | "down") {
+  if (!getFocusedTerminalTarget()) return;
   const s = usePtyStore.getState();
   const tab = s.tabs.find((t) => t.id === s.activeTabId);
   if (!tab || tab.root.type === "leaf") return;
@@ -56,8 +59,7 @@ export const APP_BINDINGS: Binding[] = [
     key: "t",
     shift: false,
     run: () => {
-      const leaf = getActiveLeaf();
-      pty().addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
+      pty().addTab(workspaceCwd());
     },
   },
   {
@@ -67,7 +69,7 @@ export const APP_BINDINGS: Binding[] = [
     key: "w",
     shift: true,
     refocus: true,
-    run: () => pty().closeActivePane(),
+    run: closeFocusedSurface,
   },
   // Windows keeps plain Ctrl+D for the shell (EOF); there ⌃⇧D splits down
   // and split-right stays reachable via the palette.
@@ -113,11 +115,11 @@ export const APP_BINDINGS: Binding[] = [
       if (s.activeTabId) s.toggleBroadcast(s.activeTabId);
     },
   },
-  { key: "]", shift: true, run: () => pty().cycleTab(1) },
-  { key: "[", shift: true, run: () => pty().cycleTab(-1) },
+  { key: "]", shift: true, run: () => cycleWorkspace(1) },
+  { key: "[", shift: true, run: () => cycleWorkspace(-1) },
   {
     match: (k) => /^[1-9]$/.test(k),
-    run: (e) => pty().jumpToTab(parseInt(e.key, 10) - 1),
+    run: (e) => { const entry = useWorkspaceStore.getState().entries[parseInt(e.key,10)-1]; if (entry) activateWorkspace(entry.id); },
   },
   {
     key: ",",

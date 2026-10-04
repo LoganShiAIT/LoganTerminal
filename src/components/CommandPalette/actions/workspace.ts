@@ -1,6 +1,7 @@
+import { workspaceCwd, cycleWorkspace, closeWorkspace } from "../../../lib/workspace";
+import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import {
   activeLeafOf,
-  getActiveLeaf,
   type PtyTab,
 } from "../../../stores/ptyStore";
 import { dirLabel } from "../../../lib/paths";
@@ -38,8 +39,7 @@ export function tabActions(
       label: t("New tab"),
       hint: kbd("⌘T"),
       run: () => {
-        const leaf = getActiveLeaf();
-        pty().addTab(leaf?.cwd ?? leaf?.initialCwd ?? null);
+        pty().addTab(workspaceCwd());
       },
     },
     {
@@ -47,8 +47,8 @@ export function tabActions(
       group,
       label: t("Close current tab"),
       run: () => {
-        const s = pty();
-        if (s.activeTabId) s.closeTab(s.activeTabId);
+        const id = useWorkspaceStore.getState().activeId;
+        if (id) closeWorkspace(id);
       },
     },
     {
@@ -56,14 +56,14 @@ export function tabActions(
       group,
       label: t("Next tab"),
       hint: kbd("⌘⇧]"),
-      run: () => pty().cycleTab(1),
+      run: () => cycleWorkspace(1),
     },
     {
       id: "tab-prev",
       group,
       label: t("Previous tab"),
       hint: kbd("⌘⇧["),
-      run: () => pty().cycleTab(-1),
+      run: () => cycleWorkspace(-1),
     },
   );
 

@@ -4,7 +4,7 @@ Cross-platform terminal built for AI coding agents (Claude Code, Codex, Aider, e
 
 ## Status
 
-Phases 1–13 in: multi-tab + split panes, command palette, 8 themes, GPU rendering, OSC 133 shell integration (zsh + bash), and an agent-fleet workflow layer (broadcast input, prompt library, attention routing, prompt cadence timer, agent overview dashboard, git-branch + dirty-state awareness, one-action fleet spawn, worktree-per-agent flows with a built-in diff review panel and one-click merge), plus a fuzzy file/folder finder and a LaTeX/markdown preview panel. Daily-usable, still pre-1.0.
+Phases 1–13 in: multi-tab + split panes, command palette, 8 themes, GPU rendering, OSC 133 shell integration (zsh + bash), and an agent-fleet workflow layer (broadcast input, prompt library, attention routing, prompt cadence timer, agent overview dashboard, git-branch + dirty-state awareness, one-action fleet spawn, worktree-per-agent flows with a built-in diff review panel and one-click merge), plus a fuzzy file/folder finder, a LaTeX/markdown preview panel, and a document workspace with full-width or terminal-side reading. Daily-usable, still pre-1.0.
 
 ## Stack
 
@@ -16,14 +16,14 @@ Phases 1–13 in: multi-tab + split panes, command palette, 8 themes, GPU render
 
 ## What works today
 
-- Multi-tab terminal sessions: each tab is an independent PTY, new tabs inherit the current tab's cwd, hidden tabs stay alive (scrollback + shell process preserved). Tabs are labelled by the shell/app-set window title (OSC 0/2 — Claude Code updates it live) with the cwd as fallback. Shortcuts: ⌘T new tab, ⌘⇧W close tab/pane, ⌘⇧]/⌘⇧[ cycle, ⌘1-9 jump, drag to reorder.
+- Multi-tab terminal sessions: each tab is an independent PTY, new tabs inherit the focused terminal or document's source directory, hidden tabs stay alive (scrollback + shell process preserved). Tabs are labelled by the shell/app-set window title (OSC 0/2 — Claude Code updates it live) with the cwd as fallback. Shortcuts: ⌘T new tab, ⌘⇧W close tab/pane, ⌘⇧]/⌘⇧[ cycle, ⌘1-9 jump, drag to reorder.
 - Split panes, tmux-style: ⌘D split right, ⌘⇧D split down, ⌘⌥arrows to move focus geometrically, draggable dividers, ⌘⇧Z zoom (temporarily maximize a pane without killing its siblings). Per-pane unread dots show which background split produced output. The pane tree is part of the persisted tab snapshot.
 - Command palette (⌘P): fuzzy-searchable access to every tab/pane/terminal/appearance action, with your recently-run commands surfaced first and ranked higher while searching.
 - Shell integration (OSC 133, auto-injected for zsh and bash): ⌘↑/⌘↓ jump between prompts, ⌘⇧A selects the last command's output, failed commands get a red tick on the overview ruler and an "exit N" chip in the header, commands ≥ 2s show their duration next to it. A command that takes ≥ 10s and finishes while the window is unfocused (or its tab hidden) fires a desktop notification — great for long agent runs; toggleable in settings. On bash ≥ 4.4 everything works; macOS's stock bash 3.2 lacks `PS0`, so there the exit chip clears one prompt late and duration/⌘⇧A are unavailable — the rest degrades gracefully.
 - Scrollback search (⌘F): find bar with match count, ↩/⇧↩ next/previous, warm-accent match highlighting, prefilled from the terminal selection. Plus a scroll-to-bottom pill whenever the viewport is scrolled up.
 - GPU rendering via the xterm WebGL addon (DOM-renderer fallback), Unicode 11 widths so emoji/CJK-heavy AI CLI output lines up, smooth scrolling.
 - Background-tab activity: a tab that produces output (or exits) while hidden gets an unread dot — glance at the tab strip to see which agent finished. Exited tabs show a struck-through label and an "exited" status instead of silently looking alive.
-- Tab layout (count + each tab's last-known cwd) is remembered across app restarts via `localStorage`, up to 9 tabs. Not a full session reattach — each restored tab gets a fresh shell at its old directory, not its old scrollback/process.
+- The workspace remembers mixed tab order, file documents, companion links, reader mode, split layouts and directories across restarts via `localStorage` (up to 9 terminal tabs and 12 file documents). Legacy terminal-only layouts migrate automatically. Not a full session reattach — each restored tab gets a fresh shell at its old directory, not its old scrollback/process.
 - A brand-new tab with no directory to inherit starts in `~/Documents` instead of whatever the OS handed the process (falls back gracefully if that folder doesn't exist).
 - xterm.js terminal wired to a real shell via `portable-pty` (macOS zsh / Windows PowerShell defaults, resize-synced)
 - Drag any file(s) from Finder / Explorer into the window → paths are escaped for the active shell (POSIX quoting on macOS/Linux, PowerShell quoting on Windows) and inserted at the cursor. Drop overlay previews thumbnails for image files.
@@ -54,6 +54,18 @@ Phases 1–13 in: multi-tab + split panes, command palette, 8 themes, GPU render
 - Settings panel (⌘, or the gear button): theme picker, accent color override (presets + custom picker), cursor style/blink, ambient motion, CRT mode, long-command + bell notifications, font size, hidden-files toggle. All persisted, all applied live.
 - Eight built-in themes (Warm Dark, Midnight, Moss, Latte-light, Classic terminal black, Graphite, Sakura, Ocean) defined once in `src/themes.ts` — the same source drives the Tailwind CSS variables and the xterm ANSI palette, so UI chrome and terminal colors can't drift apart. The accent override recolors everything: cursor, selection, borders, grid pattern, scrollbars, search highlights.
 - Default look: warm dark with a subtle Claude-orange grid pattern; xterm cursor and accents in Claude coral (`#d97757`).
+
+## Document workspace and reader
+
+Open Markdown through the **Read document** action in Files or the file finder, or use the command palette. Review and Math panels offer **Read document** and **Read beside terminal**: a clean attached file opens its disk document; unsaved Review text and Math scratch text become immutable temporary snapshots, leaving the editor intact. The palette can also manually capture the terminal selection, falling back to the last command output when shell markers are available. Empty or over-1-MiB UTF-8 captures show an error.
+
+Documents share the tab strip with terminals. A companion reader stays to the right of a terminal, with a draggable 25–65% width. Below 760 px of main workspace width, it switches to full-width reading and offers a return action; widening restores the saved ratio. Hidden terminals keep their running processes and scrollback. When the reader has focus, terminal paste, clear, search, split, broadcast and file insertion actions do not write to a background terminal.
+
+The read-only reader includes a heading outline, source/preview switching, reload with retained content on failure, code and raw TeX copying, source-relative local images and a lightbox. Repeated headings have separate anchors. Tables, code and formulas scroll within their blocks. **Follow theme**, **Paper** and **Dark** are independent, persisted reading appearances. Local `marked` and KaTeX render Markdown/math; this is a Tauri WebView reader, not a native GPUI math engine. Remote image placeholders require an explicit external-open action.
+
+Restore saves file paths and layout, not temporary captures, unsaved drafts, terminal scrollback, running processes or Agent commands. Restored terminal layouts start fresh shells. This release adds manual reading and capture; automatic Agent-answer extraction, conversation history and session reattachment remain future work.
+
+See [the fixed reader fixture](docs/reader-fixtures/report.md), [screenshots and validation](openspec/changes/add-document-workspace-and-reader/validation.md). Generate a near-limit sample with `node docs/reader-fixtures/generate-large.mjs /tmp/logan-reader-large.md`; generated 1 MiB files are not committed.
 
 ## Roadmap
 

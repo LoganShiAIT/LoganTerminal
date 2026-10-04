@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from "../stores/workspaceStore";
+import { restoreSurfaceFocus } from "./workspace";
 /**
  * Tiny window-event bridge so chrome UI (command palette, header, asset
  * panel) can drive the active xterm instance, which lives inside the
@@ -12,7 +14,9 @@ export type SimpleTermCmd =
   | "prompt-next"
   | "select-output"
   /** Push the active terminal's current selection into the math store. */
-  | "send-selection";
+  | "send-selection"
+  | "read-selection"
+  | "read-selection-beside";
 
 /**
  * `paste` routes text through xterm's term.paste() — newline normalization
@@ -24,6 +28,10 @@ export type TermCmd = SimpleTermCmd | { kind: "paste"; text: string };
 export const TERM_CMD_EVENT = "logan:term-cmd";
 
 export function sendTermCmd(cmd: TermCmd) {
+  if (useWorkspaceStore.getState().focus?.kind === "document") {
+    if (cmd === "focus") restoreSurfaceFocus();
+    return;
+  }
   window.dispatchEvent(new CustomEvent<TermCmd>(TERM_CMD_EVENT, { detail: cmd }));
 }
 

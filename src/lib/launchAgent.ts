@@ -1,4 +1,5 @@
-import { usePtyStore, getActiveLeaf } from "../stores/ptyStore";
+import { workspaceCwd, getFocusedTerminalTarget } from "./workspace";
+import { usePtyStore } from "../stores/ptyStore";
 import { useAgentLauncherStore } from "../stores/agentLauncherStore";
 import { enabledLaunchers, launchLine, type AgentLauncher } from "./agentLaunchers";
 
@@ -12,8 +13,7 @@ export type LaunchMode = "tab" | "split";
 
 /** The directory a launch inherits: whatever the focused pane is sitting in. */
 function currentCwd(): string | null {
-  const leaf = getActiveLeaf();
-  return leaf?.cwd ?? leaf?.initialCwd ?? null;
+  return workspaceCwd();
 }
 
 /** The exact line a launch would type, given the current bypass switch. */
@@ -26,7 +26,7 @@ export function launchAgent(launcher: AgentLauncher, mode: LaunchMode = "tab") {
   const line = resolvedLine(launcher);
   if (!line) return;
   const pty = usePtyStore.getState();
-  if (mode === "split") pty.splitPane("row", currentCwd(), line);
+  if (mode === "split" && getFocusedTerminalTarget()) pty.splitPane("row", currentCwd(), line);
   else pty.addTab(currentCwd(), line);
 }
 
