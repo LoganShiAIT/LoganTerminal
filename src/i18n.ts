@@ -342,6 +342,26 @@ const ZH: Record<string, string> = {
   中文: "中文",
   English: "English",
   Theme: "主题",
+  "Window material": "窗口材质",
+  Solid: "实色",
+  Glass: "玻璃",
+  "Background opacity": "背景不透明度",
+  "Applying…": "应用中…",
+  "The background effect couldn't be removed — showing a solid background. Select the current material again to retry.":
+    "背景效果清理失败——已显示实色背景。再次选择当前材质可重试。",
+  "The solid background is active, but the window effect couldn't be confirmed. Select Solid again to retry.":
+    "已显示实色背景，但未能确认窗口效果状态。再次选择“实色”可重试。",
+  "Blurs the desktop behind the window (macOS Vibrancy / Windows Acrylic)":
+    "模糊窗口后面的桌面（macOS Vibrancy / Windows Acrylic）",
+  "Native glass is unavailable in this environment — showing a solid background.":
+    "当前环境不支持原生玻璃——已显示实色背景。",
+  "Glass couldn't be applied — showing a solid background. Select Glass again to retry.":
+    "玻璃材质应用失败——已显示实色背景。再次选择“玻璃”可重试。",
+  "Background blur — frost the desktop behind the window":
+    "背景模糊 —— 将窗口后面的桌面磨砂",
+  "Off shows the desktop crisply through the tint; on uses the native frost (macOS Vibrancy / Windows Acrylic)":
+    "关闭时桌面透过着色清晰可见；开启时使用原生磨砂（macOS Vibrancy / Windows Acrylic）",
+  "Only applies in glass mode": "仅在玻璃模式下生效",
   Accent: "强调色",
   auto: "自动",
   "Use the theme's own accent": "使用主题自带的强调色",

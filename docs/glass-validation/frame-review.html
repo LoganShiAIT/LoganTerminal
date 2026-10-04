@@ -1,0 +1,42 @@
+<!doctype html>
+<html data-material="glass" style="background:#00ff00">
+<head>
+  <meta charset="utf-8">
+  <title>Glass frame composition check</title>
+  <link rel="stylesheet" href="/src/index.css?direct">
+</head>
+<body>
+  <!-- Open through the Vite dev server. This uses the app's compiled CSS,
+       without copying its rules. Green exposes untinted holes/doubled tint.
+       This fixture does not exercise a native window or PTY. -->
+  <div id="root" style="background-image:none">
+    <div class="flex h-screen w-screen flex-col text-ink">
+      <header class="app-header" style="height:44px;padding:8px">
+        Browser paint fixture · green backing ·
+        <button id="seventy-five" style="margin-left:12px">75%</button>
+        <button id="hundred" style="margin-left:12px">100%</button>
+        <span id="value" style="margin-left:12px">75%</span>
+      </header>
+      <div class="flex flex-1 min-h-0">
+        <aside class="app-sidebar" style="width:320px">Shell</aside>
+        <div class="sidebar-resize-handle" style="width:4px"></div>
+        <div class="workspace-frame flex flex-1 min-w-0">
+          <main class="workspace-main flex-1 min-w-0 relative bg-panel">
+            <div class="terminal-surface absolute inset-0" style="padding:24px">Terminal region (one tint)</div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function opacity(a) {
+      document.documentElement.style.setProperty('--surface-shell', `rgba(20,16,13,${a})`);
+      document.documentElement.style.setProperty('--surface-terminal', `rgba(20,16,13,${a})`);
+      document.getElementById('value').textContent = `${a * 100}%`;
+    }
+    document.getElementById('seventy-five').onclick = () => opacity(.75);
+    document.getElementById('hundred').onclick = () => opacity(1);
+    opacity(.75);
+  </script>
+</body>
+</html>

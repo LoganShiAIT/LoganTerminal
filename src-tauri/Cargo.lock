@@ -2139,6 +2139,9 @@ dependencies = [
  "tauri-plugin-opener",
  "time",
  "uuid",
+ "window-vibrancy",
+ "windows-sys 0.59.0",
+ "windows-version",
 ]
 
 [[package]]

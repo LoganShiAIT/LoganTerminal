@@ -48,21 +48,23 @@ export default function App() {
         </Sidebar>
         <ResizeHandle active={sidebarOpen} />
 
-        <main className="flex-1 min-w-0 relative bg-panel">
-          {tabs.length === 0 ? (
-            <WelcomeScreen />
-          ) : (
-            tabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={tab.id === activeTabId ? "absolute inset-0" : "hidden"}
-              >
-                <PaneTree tab={tab} tabActive={tab.id === activeTabId} />
-              </div>
-            ))
-          )}
-          <CrtOverlay />
-        </main>
+        <div className="workspace-frame flex flex-1 min-w-0">
+          <main className="workspace-main flex-1 min-w-0 relative bg-panel">
+            {tabs.length === 0 ? (
+              <WelcomeScreen />
+            ) : (
+              tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={tab.id === activeTabId ? "absolute inset-0 terminal-surface" : "hidden"}
+                >
+                  <PaneTree tab={tab} tabActive={tab.id === activeTabId} />
+                </div>
+              ))
+            )}
+            <CrtOverlay />
+          </main>
+        </div>
       </div>
 
       <DropOverlay />

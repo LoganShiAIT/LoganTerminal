@@ -7,6 +7,28 @@ export const DEFAULT_FONT_SIZE = 17;
 
 export type CursorStyle = "block" | "bar" | "underline";
 export type Locale = "zh" | "en";
+/** Window material preference. `glass` needs native support; see lib/windowAppearance. */
+export type WindowMaterial = "solid" | "glass";
+
+export const MIN_BG_OPACITY = 0.1;
+export const MAX_BG_OPACITY = 1;
+export const DEFAULT_BG_OPACITY = 0.75;
+
+/** Unknown or missing values keep the existing solid appearance. */
+export function normalizeWindowMaterial(raw: string | null): WindowMaterial {
+  return raw === "glass" ? "glass" : "solid";
+}
+
+/**
+ * Missing, malformed, empty or non-finite input falls back to 0.75; finite
+ * out-of-range values clamp to 0.10–1.00.
+ */
+export function normalizeBackgroundOpacity(raw: string | null): number {
+  if (raw === null || raw.trim() === "") return DEFAULT_BG_OPACITY;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_BG_OPACITY;
+  return Math.min(MAX_BG_OPACITY, Math.max(MIN_BG_OPACITY, n));
+}
 
 /**
  * Animation speed multiplier, playback-rate style: 2 runs twice as fast, 0.5
@@ -37,6 +59,9 @@ const LOCALE_KEY = "logan.locale";
 const ANIM_SPEED_KEY = "logan.animSpeed";
 const MATH_INLINE_KEY = "logan.mathInline";
 const MATH_FOLLOW_KEY = "logan.mathAutoFollow";
+const WINDOW_MATERIAL_KEY = "logan.windowMaterial";
+const BG_OPACITY_KEY = "logan.backgroundOpacity";
+const BACKGROUND_BLUR_KEY = "logan.backgroundBlur";
 const DEFAULT_FLEET_CMD = "claude";
 
 function loadFontSize(): number {
@@ -110,6 +135,16 @@ interface SettingsStore {
   mathInline: boolean;
   /** Push newly-printed formulas into the Math panel automatically. */
   mathAutoFollow: boolean;
+  /** Preferred window material. Effective state lives in windowAppearance. */
+  windowMaterial: WindowMaterial;
+  /** Glass background opacity, 0.10–1.00; remembered while solid is shown. */
+  backgroundOpacity: number;
+  /**
+   * Whether glass applies the native frost (Vibrancy/Acrylic). Off = a clear
+   * window: the desktop shows through crisply under the tint. Only meaningful
+   * while the material preference is glass; the saved value is kept either way.
+   */
+  backgroundBlur: boolean;
   /**
    * Command auto-run in every pane of a fleet tab (⌘P → "New fleet tab").
    * Empty string = spawn plain shells.
@@ -132,6 +167,9 @@ interface SettingsStore {
   toggleNotifyBell: () => void;
   toggleMathInline: () => void;
   toggleMathAutoFollow: () => void;
+  setWindowMaterial: (material: WindowMaterial) => void;
+  setBackgroundOpacity: (opacity: number) => void;
+  setBackgroundBlur: (blur: boolean) => void;
   setFleetCommand: (cmd: string) => void;
   setPanelOpen: (open: boolean) => void;
 }
@@ -151,6 +189,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   notifyBell: loadBool(NOTIFY_BELL_KEY, true),
   mathInline: loadBool(MATH_INLINE_KEY, true),
   mathAutoFollow: loadBool(MATH_FOLLOW_KEY, true),
+  windowMaterial: normalizeWindowMaterial(localStorage.getItem(WINDOW_MATERIAL_KEY)),
+  backgroundOpacity: normalizeBackgroundOpacity(localStorage.getItem(BG_OPACITY_KEY)),
+  backgroundBlur: loadBool(BACKGROUND_BLUR_KEY, true),
   fleetCommand: localStorage.getItem(FLEET_CMD_KEY) ?? DEFAULT_FLEET_CMD,
   panelOpen: false,
   setLocale: (locale) => {
@@ -233,6 +274,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = !get().mathAutoFollow;
     localStorage.setItem(MATH_FOLLOW_KEY, next ? "1" : "0");
     set({ mathAutoFollow: next });
+  },
+  setWindowMaterial: (material) => {
+    const next = normalizeWindowMaterial(material);
+    localStorage.setItem(WINDOW_MATERIAL_KEY, next);
+    set({ windowMaterial: next });
+  },
+  setBackgroundOpacity: (opacity) => {
+    const next = normalizeBackgroundOpacity(String(opacity));
+    localStorage.setItem(BG_OPACITY_KEY, String(next));
+    set({ backgroundOpacity: next });
+  },
+  setBackgroundBlur: (blur) => {
+    localStorage.setItem(BACKGROUND_BLUR_KEY, blur ? "1" : "0");
+    set({ backgroundBlur: blur });
   },
   setFleetCommand: (cmd) => {
     const trimmed = cmd.trim();

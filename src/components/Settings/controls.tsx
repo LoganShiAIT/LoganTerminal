@@ -43,6 +43,7 @@ export function ChoiceButton({
   return (
     <button
       onClick={onClick}
+      aria-pressed={selected}
       title={title}
       className={`flex items-center gap-2 rounded-md border text-[13px] transition-colors ${
         mono ? "h-7 px-2.5 font-mono" : "h-8 px-3"
@@ -62,17 +63,24 @@ export function ToggleRow({
   onToggle,
   label,
   title,
+  disabled = false,
 }: {
   checked: boolean;
   onToggle: () => void;
   label: ReactNode;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
-      className="flex items-center gap-2.5 group"
+      role="switch"
+      aria-checked={checked}
+      className={`flex items-center gap-2.5 group ${
+        disabled ? "opacity-30 pointer-events-none" : ""
+      }`}
       onClick={onToggle}
       title={title}
+      disabled={disabled}
     >
       <span
         className={`w-8 h-[18px] rounded-full p-[2px] transition-colors ${

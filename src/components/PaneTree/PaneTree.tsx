@@ -166,7 +166,7 @@ export default function PaneTree({
                           ? "border-accent/70"
                           : isActivePane
                             ? "border-accent/45"
-                            : "border-edge opacity-[0.88] hover:opacity-100"
+                            : "border-edge hover:border-accent/20"
                       }`
                     : "relative h-full w-full"
                 }

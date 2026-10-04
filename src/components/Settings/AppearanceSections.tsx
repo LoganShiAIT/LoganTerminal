@@ -6,9 +6,16 @@ import {
   DEFAULT_FONT_SIZE,
   ANIM_SPEEDS,
   DEFAULT_ANIM_SPEED,
+  MIN_BG_OPACITY,
+  MAX_BG_OPACITY,
   type CursorStyle,
   type Locale,
+  type WindowMaterial,
 } from "../../stores/settingsStore";
+import {
+  useAppearanceStore,
+  retryWindowMaterial,
+} from "../../lib/windowAppearance";
 import { THEMES } from "../../themes";
 import { kbd } from "../../lib/keys";
 import { useT } from "../../i18n";
@@ -315,5 +322,101 @@ function AnimSpeedRow() {
         </Hint>
       </div>
     </div>
+  );
+}
+
+/**
+ * Solid vs. native glass, plus the background opacity behind glass.
+ *
+ * The buttons write the *preference*; the effective state comes back from
+ * the native layer through the appearance store. While the effective mode is
+ * solid — by choice, or because glass failed or is unsupported — the slider
+ * is disabled but keeps the saved glass value, and re-picking Glass retries.
+ */
+export function WindowMaterialSection() {
+  const t = useT();
+  const material = useSettingsStore((s) => s.windowMaterial);
+  const setMaterial = useSettingsStore((s) => s.setWindowMaterial);
+  const opacity = useSettingsStore((s) => s.backgroundOpacity);
+  const setOpacity = useSettingsStore((s) => s.setBackgroundOpacity);
+  const blur = useSettingsStore((s) => s.backgroundBlur);
+  const setBlur = useSettingsStore((s) => s.setBackgroundBlur);
+  const effectiveMode = useAppearanceStore((s) => s.effectiveMode);
+  const status = useAppearanceStore((s) => s.status);
+
+  const pick = (mode: WindowMaterial) => {
+    // A changed preference already triggers the coordinator subscription.
+    if (mode === material) retryWindowMaterial();
+    else setMaterial(mode);
+  };
+
+  const percent = Math.round(opacity * 100);
+  const sliderDisabled = effectiveMode === "solid";
+  let statusText: string | null = null;
+  if (status === "pending") {
+    statusText = t("Applying…");
+  } else if (status === "clear-failed") {
+    statusText = t("The background effect couldn't be removed — showing a solid background. Select the current material again to retry.");
+  } else if (material === "solid" && status !== "ok") {
+    statusText = t("The solid background is active, but the window effect couldn't be confirmed. Select Solid again to retry.");
+  } else if (material === "glass" && effectiveMode === "solid") {
+    statusText = status === "unsupported"
+      ? t("Native glass is unavailable in this environment — showing a solid background.")
+      : t("Glass couldn't be applied — showing a solid background. Select Glass again to retry.");
+  }
+
+  return (
+    <Section label={t("Window material")}>
+      <div className="flex items-center gap-2">
+        <ChoiceButton
+          selected={material === "solid"}
+          onClick={() => pick("solid")}
+        >
+          {t("Solid")}
+        </ChoiceButton>
+        <ChoiceButton
+          selected={material === "glass"}
+          onClick={() => pick("glass")}
+          title={t("Blurs the desktop behind the window (macOS Vibrancy / Windows Acrylic)")}
+        >
+          {t("Glass")}
+        </ChoiceButton>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2.5">
+        <input
+          type="range"
+          min={Math.round(MIN_BG_OPACITY * 100)}
+          max={Math.round(MAX_BG_OPACITY * 100)}
+          step={1}
+          value={percent}
+          disabled={sliderDisabled}
+          aria-label={t("Background opacity")}
+          aria-valuetext={`${percent}%`}
+          onChange={(e) => setOpacity(Number(e.target.value) / 100)}
+          className="w-40 accent-accent disabled:opacity-30"
+        />
+        <span className="font-mono text-[13px] text-muted w-10">
+          {percent}%
+        </span>
+      </div>
+      <div className="mt-2.5">
+        <ToggleRow
+          checked={blur}
+          onToggle={() => setBlur(!blur)}
+          disabled={material !== "glass"}
+          label={t("Background blur — frost the desktop behind the window")}
+          title={
+            material === "glass"
+              ? t("Off shows the desktop crisply through the tint; on uses the native frost (macOS Vibrancy / Windows Acrylic)")
+              : t("Only applies in glass mode")
+          }
+        />
+      </div>
+      {statusText && (
+        <div className="mt-1.5" role="status" aria-live="polite">
+          <Hint>{statusText}</Hint>
+        </div>
+      )}
+    </Section>
   );
 }

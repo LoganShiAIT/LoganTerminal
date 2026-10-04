@@ -28,7 +28,7 @@ export function Sidebar({
   const resizing = useUiStore((s) => s.sidebarResizing);
   return (
     <aside
-      className={`shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm ${
+      className={`app-sidebar shrink-0 overflow-hidden border-edge bg-panel/60 backdrop-blur-sm ${
         resizing
           ? ""
           : "transition-[width,opacity,border-width] duration-200 ease-out"
@@ -70,7 +70,7 @@ export function ResizeHandle({ active }: { active: boolean }) {
 
   return (
     <div
-      className={`group relative z-10 shrink-0 bg-transparent transition-[width,opacity] duration-200 ease-out ${
+      className={`sidebar-resize-handle group relative z-10 shrink-0 bg-transparent transition-[width,opacity] duration-200 ease-out ${
         active ? "w-1 cursor-col-resize opacity-100" : "w-0 opacity-0"
       }`}
       onMouseDown={

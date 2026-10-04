@@ -38,7 +38,7 @@ export default function AppHeader() {
   return (
     <header
       data-tauri-drag-region="deep"
-      className={`relative z-30 h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
+      className={`app-header relative z-30 h-11 shrink-0 flex items-center gap-3 pr-3 border-b border-edge bg-panel/70 backdrop-blur-md ${
         isMac ? "pl-20" : "pl-2"
       }`}
     >

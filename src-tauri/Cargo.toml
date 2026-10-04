@@ -19,7 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
@@ -39,3 +39,11 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 # Pin to a compatible version until cookie is updated upstream.
 time = "=0.3.51"
 
+# Native material: macOS uses window-vibrancy; Windows checks system API
+# results directly (window-vibrancy's Windows path discards those errors).
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-version = "0.1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_Graphics_Dwm"] }

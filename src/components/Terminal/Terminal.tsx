@@ -9,6 +9,7 @@ import { usePtyStore, findLeaf, paneWhere } from "../../stores/ptyStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useMathStore } from "../../stores/mathStore";
 import { buildXtermTheme } from "../../themes";
+import { useAppearanceStore } from "../../lib/windowAppearance";
 import { onTermCmd } from "../../lib/termBus";
 import { notify } from "../../lib/notify";
 import { openTerminalLink } from "../../lib/openLink";
@@ -79,7 +80,12 @@ export default function Terminal({
       cursorStyle: settings.cursorStyle,
       smoothScrollDuration: 120,
       allowProposedApi: true,
-      theme: buildXtermTheme(settings.themeId, settings.accentOverride),
+      allowTransparency: true,
+      theme: buildXtermTheme(
+        settings.themeId,
+        settings.accentOverride,
+        useAppearanceStore.getState().effectiveMode === "glass",
+      ),
       // Explicit OSC 8 hyperlinks (agents emit these for file references).
       // window.open is dead in a Tauri webview, so route through the
       // opener plugin; non-http protocols are filtered inside the handler.
@@ -209,7 +215,11 @@ export default function Terminal({
         onSize();
       }
       if (s.themeId !== prev.themeId || s.accentOverride !== prev.accentOverride) {
-        term.options.theme = buildXtermTheme(s.themeId, s.accentOverride);
+        term.options.theme = buildXtermTheme(
+          s.themeId,
+          s.accentOverride,
+          useAppearanceStore.getState().effectiveMode === "glass",
+        );
       }
       if (s.cursorStyle !== prev.cursorStyle) {
         term.options.cursorStyle = s.cursorStyle;
@@ -222,6 +232,19 @@ export default function Terminal({
         if (!s.mathInline) math.clearUnderlines();
         math.scheduleScan();
       }
+    });
+
+    // Effective material change: swap only the default background in the
+    // existing instance's theme — never a dispose/reopen, and hidden panes
+    // get the same update through their own subscriptions.
+    const unsubAppearance = useAppearanceStore.subscribe((s, prev) => {
+      if (s.effectiveMode === prev.effectiveMode) return;
+      const st = useSettingsStore.getState();
+      term.options.theme = buildXtermTheme(
+        st.themeId,
+        st.accentOverride,
+        s.effectiveMode === "glass",
+      );
     });
 
     // Chrome UI (command palette, header buttons) drives the active terminal
@@ -290,6 +313,7 @@ export default function Terminal({
       io.disconnect();
       if (trailing !== null) window.clearTimeout(trailing);
       unsubSettings();
+      unsubAppearance();
       unsubTermCmd();
       window.removeEventListener("keydown", onKey);
       container.removeEventListener("mousedown", focusOnClick);

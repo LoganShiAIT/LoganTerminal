@@ -354,11 +354,18 @@ export function applyTheme(theme: Theme, accentOverride: string | null) {
 export function buildXtermTheme(
   themeId: string,
   accentOverride: string | null,
+  transparentBackground = false,
 ): ITheme {
   const theme = getTheme(themeId);
   const accent = accentOverride ?? theme.ui.accent;
   return {
     ...theme.xterm,
+    // Glass mode: the pane's own surface (CSS) paints the base tint once and
+    // xterm's default background gets out of the way. ANSI backgrounds,
+    // cursor and selection keep their palette colors either way.
+    background: transparentBackground
+      ? "#00000000"
+      : theme.xterm.background,
     cursor: accent,
     cursorAccent: theme.xterm.background,
     selectionBackground: withAlpha(accent, 0.3),
